@@ -299,7 +299,22 @@ body {
     <div class="s-err" id="s-err"></div>
   </div>
 
-  <div class="login-footer">🔒 Secured · Connected to Summer Fest 2026 Backend</div>
+  <div class="login-footer" id="login-footer" onclick="footerTap()">🔒 Secured · Summer Fest 2026 Backend</div>
+
+<!-- Hidden config panel (tap footer 5x to open) -->
+<div id="cfg-panel" style="display:none;margin-top:16px;width:100%;max-width:380px">
+  <div style="background:rgba(255,255,255,0.06);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:16px;">
+    <p style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px">⚙ Backend URL</p>
+    <input id="cfg-url" type="url" placeholder="https://your-app.onrender.com"
+      style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text);font-size:13px;margin-bottom:8px;font-family:inherit;outline:none"
+      value=""/>
+    <div style="display:flex;gap:8px">
+      <button onclick="saveCfg()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer">Save & Reload</button>
+      <button onclick="clearCfg()" style="padding:10px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text2);cursor:pointer">Clear</button>
+    </div>
+    <p style="font-size:10px;color:rgba(167,139,202,0.5);margin-top:8px">Current: <span id="cfg-cur" style="color:var(--accent2)"></span></p>
+  </div>
+</div>
 </div>
 
 <!-- ── Scanner App (hidden until login) ──────────────────── -->
@@ -365,8 +380,9 @@ body {
 </div>
 
 <script>
-// ── Backend URL (Railway deployment) ───────────────────────────
-const API_BASE = 'https://web-production-5bc38.up.railway.app';
+// ── Backend URL — reads from localStorage, falls back to Render/Railway URL
+// To update: open browser console → localStorage.setItem('sf_api_base','https://NEW-URL') → location.reload()
+const API_BASE = (localStorage.getItem('sf_api_base') || 'https://web-production-5bc38.up.railway.app').replace(/\/+$/, '');
 
 let TOKEN = '';
 let scanning = false;
@@ -374,6 +390,28 @@ let videoStream = null;
 let scanStats = { valid: 0, used: 0, invalid: 0 };
 let lastScanned = '';
 let searchTimer = null;
+
+// ── Hidden config panel (tap footer 5x) ───────────────────────
+let _footerTaps = 0, _footerTimer = null;
+function footerTap() {
+  clearTimeout(_footerTimer);
+  _footerTaps++;
+  _footerTimer = setTimeout(() => { _footerTaps = 0; }, 2000);
+  if (_footerTaps >= 5) {
+    _footerTaps = 0;
+    const panel = document.getElementById('cfg-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('cfg-url').value = localStorage.getItem('sf_api_base') || '';
+    document.getElementById('cfg-cur').textContent = API_BASE;
+  }
+}
+function saveCfg() {
+  const v = document.getElementById('cfg-url').value.trim();
+  if (!v.startsWith('http')) { alert('Must start with https://'); return; }
+  localStorage.setItem('sf_api_base', v);
+  location.reload();
+}
+function clearCfg() { localStorage.removeItem('sf_api_base'); location.reload(); }
 
 // ── Login ──────────────────────────────────────────────────────
 async function scannerLogin() {

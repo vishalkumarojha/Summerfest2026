@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: summerfest-backend
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install && npx puppeteer browsers install chrome
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EVENT_NAME
+        value: Summer Fest 2026
+      - key: EVENT_DATE
+        value: 8th April 2026
+      - key: EVENT_TIME
+        value: 6PM - 10PM
+      - key: EVENT_VENUE
+        value: Cricket Ground, VIT Bhopal
+      - key: EVENT_DESCRIPTION
+        value: Bolly-Tech Experience · International DJ · Dance Performances
+      - key: TICKET_PRICE
+        value: "₹299"
+      - key: SCAN_RATE_LIMIT
+        value: 60
+      - key: MAX_FILE_SIZE_MB
+        value: 5
+      - key: ALLOWED_ORIGIN
+        value: https://summerfest2026.vercel.app,https://summerfest-scanner.vercel.app
