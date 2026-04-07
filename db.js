@@ -3,8 +3,7 @@ require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-  console.error("❌  SUPABASE_URL or SUPABASE_SERVICE_KEY missing from .env");
-  process.exit(1);
+  console.error("❌  SUPABASE_URL or SUPABASE_SERVICE_KEY missing from .env — DB calls will fail");
 }
 
 // Service-role client — bypasses RLS, server-side only
