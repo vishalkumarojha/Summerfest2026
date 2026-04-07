@@ -129,17 +129,51 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', syste
 
 /* ── Login guard ── */
 #scanner-login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-.login-mini { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; max-width: 320px; width: 100%; }
-.login-mini h2 { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
+.login-mini { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; max-width: 340px; width: 100%; }
+.login-mini h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+.login-mini .subtitle { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
 .login-mini input {
   width: 100%; padding: 10px; background: var(--bg); border: 1px solid var(--border);
   border-radius: 8px; color: var(--text); font-size: 14px; outline: none; margin-bottom: 10px;
 }
+.login-mini input:focus { border-color: var(--accent); }
 .login-mini button {
   width: 100%; padding: 11px; background: var(--accent); border: none; border-radius: 8px;
   color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .err { color: var(--red); font-size: 12px; margin-top: 6px; }
+
+/* ── API Setup panel ── */
+.setup-toggle {
+  width: 100%; margin-top: 12px; padding: 8px;
+  background: transparent; border: 1px dashed var(--border); border-radius: 8px;
+  color: var(--text2); font-size: 12px; cursor: pointer;
+}
+.setup-panel {
+  display: none; margin-top: 10px; padding: 12px;
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px;
+}
+.setup-panel label { font-size: 11px; color: var(--text2); display: block; margin-bottom: 4px; }
+.setup-panel input {
+  width: 100%; padding: 8px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 13px; outline: none; margin-bottom: 8px;
+  font-family: monospace;
+}
+.setup-row { display: flex; gap: 8px; }
+.setup-save {
+  flex: 1; padding: 8px; background: var(--accent); border: none; border-radius: 6px;
+  color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.setup-clear {
+  padding: 8px 14px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text2); font-size: 12px; cursor: pointer;
+}
+.api-badge {
+  margin-top: 10px; padding: 6px 10px; border-radius: 6px;
+  background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3);
+  font-size: 11px; font-family: monospace; color: var(--green); word-break: break-all;
+}
+.api-badge.local { background: rgba(124,58,237,0.1); border-color: var(--border); color: var(--text2); }
 </style>
 </head>
 <body>
@@ -148,11 +182,23 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', syste
 <div id="scanner-login">
   <div class="login-mini">
     <h2>🎟 Gate Scanner</h2>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Summer Fest 2026 · Entry Control</p>
-    <input type="text" id="s-user" placeholder="Username" autocomplete="username"/>
+    <p class="subtitle">Summer Fest 2026 · Entry Control</p>
+    <input type="text" id="s-user" placeholder="Username (e.g. scanner1)" autocomplete="username"/>
     <input type="password" id="s-pass" placeholder="Password" autocomplete="current-password"/>
-    <button onclick="scannerLogin()">Enter →</button>
+    <button id="login-btn" onclick="scannerLogin()">Enter →</button>
     <div class="err" id="s-err"></div>
+
+    <!-- ⚙ API Setup (for Vercel-hosted version) -->
+    <button class="setup-toggle" onclick="toggleSetup()">⚙ Advanced Setup (tap to set API server URL)</button>
+    <div class="setup-panel" id="setup-panel">
+      <label>Backend API URL (ngrok / tunnel URL)</label>
+      <input type="url" id="api-url-input" placeholder="https://abc123.ngrok-free.app" />
+      <div class="setup-row">
+        <button class="setup-save" onclick="saveApiUrl()">💾 Save URL</button>
+        <button class="setup-clear" onclick="clearApiUrl()">✕ Clear</button>
+      </div>
+      <div id="api-current"></div>
+    </div>
   </div>
 </div>
 
@@ -160,7 +206,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', syste
 <div id="scanner-app" style="display:none">
   <div class="header">
     <h1>🎟 Summer Fest 2026 – Entry Gate</h1>
-    <p>Scan QR code to grant entry</p>
+    <p id="header-sub">Scan QR code to grant entry</p>
   </div>
 
   <div class="container">
@@ -213,6 +259,11 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', syste
 </div>
 
 <script>
+// ── API Base URL ────────────────────────────────────────────────
+// When deployed on Vercel the person pastes their ngrok URL via ⚙ Setup.
+// When running locally (same origin) API_BASE stays empty so relative paths work.
+const API_BASE = (localStorage.getItem('sf_api_base') || '').replace(/\/+$/, '');
+
 let TOKEN = '';
 let scanning = false;
 let videoStream = null;
@@ -220,25 +271,79 @@ let scanStats = { valid: 0, used: 0, invalid: 0 };
 let lastScanned = '';
 let searchTimer = null;
 
+// ── Setup panel ─────────────────────────────────────────────────
+function toggleSetup() {
+  const p = document.getElementById('setup-panel');
+  p.style.display = p.style.display === 'block' ? 'none' : 'block';
+  refreshApiDisplay();
+}
+
+function refreshApiDisplay() {
+  const cur = localStorage.getItem('sf_api_base') || '';
+  const el  = document.getElementById('api-current');
+  if (cur) {
+    el.innerHTML = `<div class="api-badge">✅ API: ${esc(cur)}</div>`;
+    document.getElementById('api-url-input').value = cur;
+  } else {
+    el.innerHTML = `<div class="api-badge local">📡 Using same-origin (local dev)</div>`;
+  }
+}
+
+function saveApiUrl() {
+  const val = document.getElementById('api-url-input').value.trim();
+  if (!val) { alert('Please enter a URL first'); return; }
+  if (!val.startsWith('http')) { alert('URL must start with https://'); return; }
+  localStorage.setItem('sf_api_base', val);
+  refreshApiDisplay();
+  // Reload so API_BASE picks up the new value
+  setTimeout(() => location.reload(), 600);
+}
+
+function clearApiUrl() {
+  localStorage.removeItem('sf_api_base');
+  document.getElementById('api-url-input').value = '';
+  refreshApiDisplay();
+  setTimeout(() => location.reload(), 400);
+}
+
+// Show badge on load
+(function() {
+  const cur = localStorage.getItem('sf_api_base') || '';
+  if (cur) {
+    const el = document.getElementById('api-current');
+    el.innerHTML = `<div class="api-badge">✅ ${esc(cur)}</div>`;
+    document.getElementById('setup-panel').style.display = 'block';
+  }
+})();
+
 // ── Login ──────────────────────────────────────────────────────
 async function scannerLogin() {
-  const u = document.getElementById('s-user').value.trim();
-  const p = document.getElementById('s-pass').value;
-  document.getElementById('s-err').textContent = '';
+  const u   = document.getElementById('s-user').value.trim();
+  const p   = document.getElementById('s-pass').value;
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('s-err');
+  err.textContent = '';
+  btn.textContent = 'Signing in…';
+  btn.disabled = true;
   try {
-    const r = await fetch('/api/admin/login', {
+    const r = await fetch(`${API_BASE}/api/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: u, password: p })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
+    if (!r.ok) throw new Error(d.error || 'Login failed');
+    if (d.role !== 'scanner' && d.role !== 'admin') throw new Error('Not a scanner account');
     TOKEN = d.token;
     document.getElementById('scanner-login').style.display = 'none';
-    document.getElementById('scanner-app').style.display = 'block';
+    document.getElementById('scanner-app').style.display   = 'block';
+    document.getElementById('header-sub').textContent = `Logged in as ${u} · ${API_BASE ? '🌐 Remote DB' : '💻 Local DB'}`;
     startCamera();
   } catch(e) {
-    document.getElementById('s-err').textContent = e.message;
+    err.textContent = e.message;
+  } finally {
+    btn.textContent = 'Enter →';
+    btn.disabled = false;
   }
 }
 
@@ -291,13 +396,14 @@ function focusManual() {
 
 // ── QR scan handler ────────────────────────────────────────────
 async function handleQRScan(token) {
-  // 1. Verify first (read-only)
   try {
-    const r = await fetch('/api/verify/' + encodeURIComponent(token), { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const r = await fetch(`${API_BASE}/api/verify/` + encodeURIComponent(token), {
+      headers: { 'Authorization': 'Bearer ' + TOKEN }
+    });
     const d = await r.json();
     showResult(d, token);
   } catch(e) {
-    showResult({ status: 'INVALID', message: 'Network error' }, token);
+    showResult({ status: 'INVALID', message: 'Network error: ' + e.message }, token);
   }
 }
 
@@ -352,7 +458,7 @@ function showResult(data, token) {
 
 async function admitUser(ticketId) {
   try {
-    const r = await fetch('/api/check-in/' + encodeURIComponent(ticketId), {
+    const r = await fetch(`${API_BASE}/api/check-in/` + encodeURIComponent(ticketId), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN }
     });
@@ -396,7 +502,9 @@ async function manualLookup() {
   const resultsEl = document.getElementById('search-results');
   resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2)">Searching…</p>';
   try {
-    const r = await fetch('/api/search-ticket?q=' + encodeURIComponent(q), { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const r = await fetch(`${API_BASE}/api/search-ticket?q=` + encodeURIComponent(q), {
+      headers: { 'Authorization': 'Bearer ' + TOKEN }
+    });
     const d = await r.json();
     if (!d.results.length) {
       resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2)">No results found</p>';
@@ -416,8 +524,9 @@ async function manualLookup() {
 async function selectManualResult(uuid, name) {
   document.getElementById('search-results').innerHTML = '';
   document.getElementById('manual-query').value = '';
-  // Verify ticket
-  const r = await fetch('/api/verify/' + encodeURIComponent(uuid), { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+  const r = await fetch(`${API_BASE}/api/verify/` + encodeURIComponent(uuid), {
+    headers: { 'Authorization': 'Bearer ' + TOKEN }
+  });
   const d = await r.json();
   showResult(d, uuid);
 }
@@ -434,7 +543,7 @@ function vibrate(pattern) {
   if ('vibrate' in navigator) navigator.vibrate(pattern);
 }
 function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&#34;');
 }
 </script>
 </body>

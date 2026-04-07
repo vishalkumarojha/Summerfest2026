@@ -1,1 +1,28 @@
+# ── Node ───────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── Environment & Secrets ──────────────────────────────────────
+.env
+.env.local
+.env.production
 .scanner-credentials
+
+# ── Database (never commit the live DB) ───────────────────────
+summerfest.db
+summerfest.db-shm
+summerfest.db-wal
+
+# ── Generated files ────────────────────────────────────────────
+uploads/
+tickets/
+
+# ── OS / Editor ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+
+# ── Misc ───────────────────────────────────────────────────────
+node-v*.zip
+*.zip
