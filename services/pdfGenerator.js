@@ -1,5 +1,6 @@
 "use strict";
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-core");
+const chromium = require("@sparticuz/chromium");
 const QRCode    = require("qrcode");
 const { supabase } = require("../db");
 
@@ -17,19 +18,12 @@ async function generateTicketPDF(user, ticket) {
 
   const html = buildTicketHTML(user, ticket, qrDataURL);
 
-  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-    || puppeteer.executablePath();
-
   const browser = await puppeteer.launch({
-    headless: "new",
-    executablePath,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--single-process",          // important for Render free tier (limited memory)
-    ],
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+    ignoreHTTPSErrors: true,
   });
 
   try {
