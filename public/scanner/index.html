@@ -2,218 +2,321 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Summer Fest 2026 – Entry Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#0a0014"/>
+<title>Summer Fest 2026 – Gate Scanner</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <style>
 :root {
-  --bg: #0a0014; --surface: #12002a; --accent: #7c3aed;
-  --green: #10b981; --red: #ef4444; --yellow: #f59e0b;
-  --text: #f0e6ff; --text2: #a78bca; --border: rgba(124,58,237,0.3);
+  --bg: #0a0014;
+  --surface: rgba(18, 0, 42, 0.7);
+  --glass: rgba(255,255,255,0.05);
+  --glass-border: rgba(255,255,255,0.12);
+  --accent: #7c3aed;
+  --accent2: #a855f7;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #f0e6ff;
+  --text2: #a78bca;
+  --border: rgba(124,58,237,0.3);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh; min-height: 100dvh;
+  overflow-x: hidden;
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(124,58,237,0.35) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 90%, rgba(168,85,247,0.2) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(76,29,149,0.15) 0%, transparent 70%);
+  background-attachment: fixed;
+}
+
+/* ─── LOGIN SCREEN ──────────────────────────────────────── */
+#scanner-login {
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 20px 16px;
+}
+
+.login-logo {
+  margin-bottom: 28px; text-align: center;
+}
+.login-logo .badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(124,58,237,0.2);
+  border: 1px solid rgba(124,58,237,0.4);
+  border-radius: 40px; padding: 6px 16px;
+  font-size: 11px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--accent2);
+  margin-bottom: 12px;
+}
+.login-logo h1 {
+  font-size: 28px; font-weight: 900; color: #fff;
+  background: linear-gradient(135deg, #fff 0%, #c084fc 50%, #ffd700 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.login-logo p { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+/* Glass card */
+.login-card {
+  width: 100%; max-width: 380px;
+  background: rgba(255,255,255,0.06);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  padding: 28px 24px;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(124,58,237,0.2) inset,
+    0 1px 0 rgba(255,255,255,0.1) inset;
+}
+
+.login-card label {
+  display: block; font-size: 11px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text2); margin-bottom: 6px;
+}
+.login-card input {
+  width: 100%; padding: 13px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px; color: var(--text);
+  font-size: 15px; font-family: inherit; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  -webkit-appearance: none;
+}
+.login-card input::placeholder { color: rgba(167,139,202,0.5); }
+.login-card input:focus {
+  border-color: var(--accent);
+  background: rgba(124,58,237,0.08);
+}
+.field { margin-bottom: 16px; }
+
+.login-btn {
+  width: 100%; padding: 14px; margin-top: 8px;
+  background: linear-gradient(135deg, #6d28d9, #7c3aed, #8b5cf6);
+  border: none; border-radius: 12px;
+  color: #fff; font-size: 15px; font-weight: 700;
+  font-family: inherit; cursor: pointer; letter-spacing: 0.3px;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+  transition: opacity 0.2s, transform 0.1s;
+  -webkit-appearance: none;
+}
+.login-btn:active { transform: scale(0.98); opacity: 0.9; }
+.login-btn:disabled { opacity: 0.6; cursor: wait; }
+
+.s-err {
+  margin-top: 12px; padding: 10px 14px;
+  background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 10px; color: #fca5a5; font-size: 13px;
+  text-align: center; display: none;
+}
+.s-err.show { display: block; }
+
+.login-footer {
+  margin-top: 20px; text-align: center;
+  font-size: 11px; color: rgba(167,139,202,0.5);
+}
+
+/* ─── SCANNER APP ───────────────────────────────────────── */
+#scanner-app { display: none; min-height: 100vh; }
 
 .header {
-  background: linear-gradient(135deg, #1a0533, #4c1d95);
-  padding: 16px 20px; text-align: center;
+  background: rgba(10,0,20,0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
 }
-.header h1 { font-size: 18px; font-weight: 900; }
-.header p  { font-size: 12px; color: var(--text2); margin-top: 2px; }
-
-.container { max-width: 480px; margin: 0 auto; padding: 20px 16px; }
-
-/* ── Camera ── */
-.camera-section { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: 20px; background: #000; }
-#camera-video { width: 100%; display: block; }
-#camera-canvas { display: none; }
-.scan-overlay {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
-}
-.scan-frame {
-  width: 200px; height: 200px; border: 3px solid rgba(255,255,255,0.6); border-radius: 16px;
-  box-shadow: 0 0 0 2000px rgba(0,0,0,0.4);
-  position: relative;
-}
-.scan-frame::before, .scan-frame::after {
-  content: ''; position: absolute; width: 24px; height: 24px;
-  border-color: var(--accent); border-style: solid;
-}
-.scan-frame::before { top: -3px; left: -3px; border-width: 4px 0 0 4px; border-radius: 8px 0 0 0; }
-.scan-frame::after  { bottom: -3px; right: -3px; border-width: 0 4px 4px 0; border-radius: 0 0 8px 0; }
-.scan-line {
-  position: absolute; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  animation: scanLine 2s ease-in-out infinite;
-}
-@keyframes scanLine {
-  0% { top: 10px; } 50% { top: calc(100% - 10px); } 100% { top: 10px; }
+.header-left h1 { font-size: 15px; font-weight: 800; }
+.header-left p  { font-size: 11px; color: var(--text2); margin-top: 1px; }
+.logout-btn {
+  padding: 6px 12px; border-radius: 8px;
+  background: rgba(124,58,237,0.2); border: 1px solid var(--border);
+  color: var(--text2); font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
 }
 
-.camera-status {
-  padding: 8px 12px; text-align: center;
-  font-size: 12px; color: var(--text2); background: rgba(0,0,0,0.6);
-}
+.container { max-width: 480px; margin: 0 auto; padding: 16px; }
 
-/* ── Camera controls ── */
-.cam-controls { display: flex; gap: 8px; margin-bottom: 16px; }
+/* Stats bar */
+.stats-bar {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin-bottom: 16px;
+}
+.stats-mini {
+  background: var(--glass); border: 1px solid var(--glass-border);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-radius: 12px; padding: 10px 8px; text-align: center;
+}
+.stats-mini .n { font-size: 22px; font-weight: 800; line-height: 1; }
+.stats-mini .l { font-size: 10px; color: var(--text2); margin-top: 3px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+
+/* Result card */
+.result-card {
+  display: none; margin-bottom: 16px; padding: 20px;
+  border-radius: 16px; border: 2px solid transparent;
+  background: var(--glass); backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px); text-align: center;
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.result-card.valid   { border-color: var(--green); background: rgba(16,185,129,0.08); }
+.result-card.used    { border-color: var(--red);   background: rgba(239,68,68,0.08);  }
+.result-card.invalid { border-color: var(--yellow); background: rgba(245,158,11,0.08); }
+.result-icon   { font-size: 40px; margin-bottom: 8px; }
+.result-status { font-size: 13px; font-weight: 700; letter-spacing: 2px; opacity: 0.7; }
+.result-name   { font-size: 20px; font-weight: 800; margin: 6px 0 2px; }
+.result-uuid   { font-size: 12px; color: var(--text2); font-family: monospace; }
+.result-msg    { font-size: 13px; color: var(--text2); margin: 8px 0 16px; }
+.confirm-btn {
+  padding: 12px 20px; border-radius: 12px; border: none;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  font-family: inherit; margin: 4px; min-width: 120px;
+  transition: opacity 0.15s; -webkit-appearance: none;
+}
+.confirm-btn:active { opacity: 0.8; }
+.confirm-btn.admit { background: var(--green); color: #fff; }
+.confirm-btn.clear { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); }
+
+/* Camera controls */
+.cam-controls { display: flex; gap: 8px; margin-bottom: 12px; }
 .cam-btn {
-  flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+  flex: 1; padding: 11px 8px;
+  border-radius: 12px; border: 1px solid var(--glass-border);
+  background: var(--glass); backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  transition: background 0.2s; -webkit-appearance: none;
 }
 .cam-btn.active { background: var(--accent); border-color: var(--accent); }
 
-/* ── Manual lookup ── */
-.manual-section {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-  padding: 16px; margin-bottom: 20px;
+/* Camera */
+.camera-section {
+  position: relative; border-radius: 16px; overflow: hidden;
+  margin-bottom: 16px; background: #000; aspect-ratio: 4/3;
 }
-.manual-section h3 { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+#camera-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+#camera-canvas { display: none; }
+.scan-overlay {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; pointer-events: none;
+}
+.scan-frame {
+  width: 210px; height: 210px;
+  border: 2px solid rgba(255,255,255,0.5); border-radius: 20px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,0.45);
+}
+.scan-frame::before, .scan-frame::after {
+  content: ''; position: absolute; width: 28px; height: 28px;
+  border-color: var(--accent2); border-style: solid;
+}
+.scan-frame::before { top: -2px; left: -2px; border-width: 4px 0 0 4px; border-radius: 10px 0 0 0; }
+.scan-frame::after  { bottom: -2px; right: -2px; border-width: 0 4px 4px 0; border-radius: 0 0 10px 0; }
+.scan-line {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent2), transparent);
+  animation: scanLine 2s ease-in-out infinite;
+}
+@keyframes scanLine {
+  0% { top: 8px; } 50% { top: calc(100% - 8px); } 100% { top: 8px; }
+}
+.camera-status {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 8px 12px; text-align: center;
+  font-size: 12px; font-weight: 500; color: var(--text2);
+  background: rgba(0,0,0,0.6);
+}
+
+/* Manual lookup */
+.manual-section {
+  background: var(--glass); border: 1px solid var(--glass-border);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-radius: 16px; padding: 16px; margin-bottom: 16px;
+}
+.manual-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
 .manual-row { display: flex; gap: 8px; }
 .manual-input {
-  flex: 1; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 10px; color: var(--text); font-size: 14px; outline: none;
+  flex: 1; padding: 11px 14px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border);
+  border-radius: 10px; color: var(--text); font-size: 14px;
+  font-family: inherit; outline: none; -webkit-appearance: none;
 }
 .manual-input:focus { border-color: var(--accent); }
 .manual-btn {
-  padding: 10px 18px; background: var(--accent); border: none; border-radius: 10px;
-  color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+  padding: 11px 16px; background: var(--accent); border: none;
+  border-radius: 10px; color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: inherit; -webkit-appearance: none;
 }
-.search-results { margin-top: 10px; }
 .search-result-item {
-  padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
-  margin-bottom: 6px; cursor: pointer; transition: background 0.15s;
+  padding: 10px 12px; margin-top: 8px; cursor: pointer;
+  border-radius: 10px; background: rgba(255,255,255,0.04);
+  border: 1px solid var(--glass-border);
+  transition: background 0.15s;
 }
-.search-result-item:hover { background: rgba(124,58,237,0.1); }
-.search-result-item .r-name { font-weight: 700; font-size: 14px; }
+.search-result-item:active { background: rgba(124,58,237,0.15); }
+.search-result-item .r-name { font-size: 14px; font-weight: 700; }
 .search-result-item .r-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
-
-/* ── Result card ── */
-.result-card {
-  border-radius: 16px; padding: 24px 20px; text-align: center;
-  margin-bottom: 20px; display: none; animation: fadeIn 0.3s ease;
-}
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.result-card.valid     { background: rgba(16,185,129,0.1); border: 2px solid var(--green); }
-.result-card.used      { background: rgba(239,68,68,0.1);  border: 2px solid var(--red); }
-.result-card.invalid   { background: rgba(239,68,68,0.08); border: 2px solid rgba(239,68,68,0.5); }
-
-.result-icon   { font-size: 48px; margin-bottom: 10px; }
-.result-status { font-size: 24px; font-weight: 900; margin-bottom: 6px; }
-.result-name   { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-.result-uuid   { font-size: 12px; font-family: monospace; color: var(--text2); margin-bottom: 4px; }
-.result-msg    { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
-.result-card.valid   .result-status { color: var(--green); }
-.result-card.used    .result-status { color: var(--red); }
-.result-card.invalid .result-status { color: var(--red); }
-
-.confirm-btn {
-  padding: 12px 28px; border-radius: 10px; border: none; font-size: 15px; font-weight: 800;
-  cursor: pointer; transition: opacity 0.15s;
-}
-.confirm-btn.admit  { background: var(--green); color: #fff; }
-.confirm-btn.clear  { background: var(--surface); color: var(--text2); border: 1px solid var(--border); margin-left: 8px; }
-.confirm-btn:hover  { opacity: 0.85; }
-
-/* ── Stats bar ── */
-.stats-bar {
-  display: flex; gap: 10px; margin-bottom: 16px;
-}
-.stats-mini {
-  flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-  padding: 10px 14px; text-align: center;
-}
-.stats-mini .n  { font-size: 22px; font-weight: 900; }
-.stats-mini .l  { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text2); margin-top: 2px; }
-
-/* ── Login guard ── */
-#scanner-login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-.login-mini { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; max-width: 340px; width: 100%; }
-.login-mini h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
-.login-mini .subtitle { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
-.login-mini input {
-  width: 100%; padding: 10px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--text); font-size: 14px; outline: none; margin-bottom: 10px;
-}
-.login-mini input:focus { border-color: var(--accent); }
-.login-mini button {
-  width: 100%; padding: 11px; background: var(--accent); border: none; border-radius: 8px;
-  color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
-}
-.err { color: var(--red); font-size: 12px; margin-top: 6px; }
-
-/* ── API Setup panel ── */
-.setup-toggle {
-  width: 100%; margin-top: 12px; padding: 8px;
-  background: transparent; border: 1px dashed var(--border); border-radius: 8px;
-  color: var(--text2); font-size: 12px; cursor: pointer;
-}
-.setup-panel {
-  display: none; margin-top: 10px; padding: 12px;
-  background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px;
-}
-.setup-panel label { font-size: 11px; color: var(--text2); display: block; margin-bottom: 4px; }
-.setup-panel input {
-  width: 100%; padding: 8px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-size: 13px; outline: none; margin-bottom: 8px;
-  font-family: monospace;
-}
-.setup-row { display: flex; gap: 8px; }
-.setup-save {
-  flex: 1; padding: 8px; background: var(--accent); border: none; border-radius: 6px;
-  color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
-}
-.setup-clear {
-  padding: 8px 14px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text2); font-size: 12px; cursor: pointer;
-}
-.api-badge {
-  margin-top: 10px; padding: 6px 10px; border-radius: 6px;
-  background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3);
-  font-size: 11px; font-family: monospace; color: var(--green); word-break: break-all;
-}
-.api-badge.local { background: rgba(124,58,237,0.1); border-color: var(--border); color: var(--text2); }
 </style>
 </head>
 <body>
 
-<!-- Login Guard -->
+<!-- ── Login Screen ─────────────────────────────────────── -->
 <div id="scanner-login">
-  <div class="login-mini">
-    <h2>🎟 Gate Scanner</h2>
-    <p class="subtitle">Summer Fest 2026 · Entry Control</p>
-    <input type="text" id="s-user" placeholder="Username (e.g. scanner1)" autocomplete="username"/>
-    <input type="password" id="s-pass" placeholder="Password" autocomplete="current-password"/>
-    <button id="login-btn" onclick="scannerLogin()">Enter →</button>
-    <div class="err" id="s-err"></div>
-
-    <!-- ⚙ API Setup (for Vercel-hosted version) -->
-    <button class="setup-toggle" onclick="toggleSetup()">⚙ Advanced Setup (tap to set API server URL)</button>
-    <div class="setup-panel" id="setup-panel">
-      <label>Backend API URL (ngrok / tunnel URL)</label>
-      <input type="url" id="api-url-input" placeholder="https://abc123.ngrok-free.app" />
-      <div class="setup-row">
-        <button class="setup-save" onclick="saveApiUrl()">💾 Save URL</button>
-        <button class="setup-clear" onclick="clearApiUrl()">✕ Clear</button>
-      </div>
-      <div id="api-current"></div>
-    </div>
+  <div class="login-logo">
+    <div class="badge">🎪 Gate Control · VIT Bhopal</div>
+    <h1>Gate Scanner</h1>
+    <p>Summer Fest 2026 · Entry Control</p>
   </div>
+
+  <div class="login-card">
+    <div class="field">
+      <label for="s-user">Scanner Username</label>
+      <input type="text" id="s-user" placeholder="e.g. scanner1"
+             autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"/>
+    </div>
+    <div class="field">
+      <label for="s-pass">Password</label>
+      <input type="password" id="s-pass" placeholder="••••••••••••"
+             autocomplete="current-password"/>
+    </div>
+    <button class="login-btn" id="login-btn" onclick="scannerLogin()">Enter →</button>
+    <div class="s-err" id="s-err"></div>
+  </div>
+
+  <div class="login-footer">🔒 Secured · Connected to Summer Fest 2026 Backend</div>
 </div>
 
-<!-- Scanner App (hidden until login) -->
-<div id="scanner-app" style="display:none">
+<!-- ── Scanner App (hidden until login) ──────────────────── -->
+<div id="scanner-app">
   <div class="header">
-    <h1>🎟 Summer Fest 2026 – Entry Gate</h1>
-    <p id="header-sub">Scan QR code to grant entry</p>
+    <div class="header-left">
+      <h1>🎟 Summer Fest 2026 – Entry Gate</h1>
+      <p id="header-sub">Scan QR code to grant entry</p>
+    </div>
+    <button class="logout-btn" onclick="logout()">Logout</button>
   </div>
 
   <div class="container">
     <!-- Stats bar -->
     <div class="stats-bar">
-      <div class="stats-mini"><div class="n" id="sc-valid" style="color:var(--green)">0</div><div class="l">Admitted</div></div>
-      <div class="stats-mini"><div class="n" id="sc-used"  style="color:var(--red)">0</div><div class="l">Duplicate</div></div>
+      <div class="stats-mini"><div class="n" id="sc-valid"   style="color:var(--green)">0</div><div class="l">Admitted</div></div>
+      <div class="stats-mini"><div class="n" id="sc-used"    style="color:var(--red)">0</div><div class="l">Duplicate</div></div>
       <div class="stats-mini"><div class="n" id="sc-invalid" style="color:var(--yellow)">0</div><div class="l">Invalid</div></div>
     </div>
 
@@ -231,7 +334,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', syste
     <div class="cam-controls">
       <button class="cam-btn active" id="btn-camera" onclick="startCamera()">📷 Camera</button>
       <button class="cam-btn" id="btn-manual" onclick="focusManual()">⌨ Manual</button>
-      <button class="cam-btn" style="flex:0;padding:10px 14px" onclick="clearResult()">✕</button>
+      <button class="cam-btn" style="flex:0;padding:11px 14px" onclick="clearResult()">✕</button>
     </div>
 
     <!-- Camera section -->
@@ -250,19 +353,20 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', syste
     <div class="manual-section">
       <h3>🔍 Manual Lookup</h3>
       <div class="manual-row">
-        <input type="text" class="manual-input" id="manual-query" placeholder="Name, email, or Ticket UUID…" oninput="debounceSearch()" onkeydown="if(event.key==='Enter')manualLookup()"/>
+        <input type="text" class="manual-input" id="manual-query"
+               placeholder="Name, email, or Ticket UUID…"
+               oninput="debounceSearch()"
+               onkeydown="if(event.key==='Enter')manualLookup()"/>
         <button class="manual-btn" onclick="manualLookup()">Search</button>
       </div>
-      <div class="search-results" id="search-results"></div>
+      <div id="search-results"></div>
     </div>
   </div>
 </div>
 
 <script>
-// ── API Base URL ────────────────────────────────────────────────
-// When deployed on Vercel the person pastes their ngrok URL via ⚙ Setup.
-// When running locally (same origin) API_BASE stays empty so relative paths work.
-const API_BASE = (localStorage.getItem('sf_api_base') || '').replace(/\/+$/, '');
+// ── Backend URL (Railway deployment) ───────────────────────────
+const API_BASE = 'https://web-production-5bc38.up.railway.app';
 
 let TOKEN = '';
 let scanning = false;
@@ -271,57 +375,13 @@ let scanStats = { valid: 0, used: 0, invalid: 0 };
 let lastScanned = '';
 let searchTimer = null;
 
-// ── Setup panel ─────────────────────────────────────────────────
-function toggleSetup() {
-  const p = document.getElementById('setup-panel');
-  p.style.display = p.style.display === 'block' ? 'none' : 'block';
-  refreshApiDisplay();
-}
-
-function refreshApiDisplay() {
-  const cur = localStorage.getItem('sf_api_base') || '';
-  const el  = document.getElementById('api-current');
-  if (cur) {
-    el.innerHTML = `<div class="api-badge">✅ API: ${esc(cur)}</div>`;
-    document.getElementById('api-url-input').value = cur;
-  } else {
-    el.innerHTML = `<div class="api-badge local">📡 Using same-origin (local dev)</div>`;
-  }
-}
-
-function saveApiUrl() {
-  const val = document.getElementById('api-url-input').value.trim();
-  if (!val) { alert('Please enter a URL first'); return; }
-  if (!val.startsWith('http')) { alert('URL must start with https://'); return; }
-  localStorage.setItem('sf_api_base', val);
-  refreshApiDisplay();
-  // Reload so API_BASE picks up the new value
-  setTimeout(() => location.reload(), 600);
-}
-
-function clearApiUrl() {
-  localStorage.removeItem('sf_api_base');
-  document.getElementById('api-url-input').value = '';
-  refreshApiDisplay();
-  setTimeout(() => location.reload(), 400);
-}
-
-// Show badge on load
-(function() {
-  const cur = localStorage.getItem('sf_api_base') || '';
-  if (cur) {
-    const el = document.getElementById('api-current');
-    el.innerHTML = `<div class="api-badge">✅ ${esc(cur)}</div>`;
-    document.getElementById('setup-panel').style.display = 'block';
-  }
-})();
-
 // ── Login ──────────────────────────────────────────────────────
 async function scannerLogin() {
   const u   = document.getElementById('s-user').value.trim();
   const p   = document.getElementById('s-pass').value;
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('s-err');
+  err.className = 's-err';
   err.textContent = '';
   btn.textContent = 'Signing in…';
   btn.disabled = true;
@@ -337,21 +397,31 @@ async function scannerLogin() {
     TOKEN = d.token;
     document.getElementById('scanner-login').style.display = 'none';
     document.getElementById('scanner-app').style.display   = 'block';
-    document.getElementById('header-sub').textContent = `Logged in as ${u} · ${API_BASE ? '🌐 Remote DB' : '💻 Local DB'}`;
+    document.getElementById('header-sub').textContent = `${u} · 🌐 Live`;
     startCamera();
   } catch(e) {
     err.textContent = e.message;
+    err.className = 's-err show';
   } finally {
     btn.textContent = 'Enter →';
     btn.disabled = false;
   }
 }
 
+function logout() {
+  if (!confirm('Log out?')) return;
+  TOKEN = ''; scanning = false;
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+  document.getElementById('scanner-app').style.display  = 'none';
+  document.getElementById('scanner-login').style.display = 'flex';
+  document.getElementById('s-pass').value = '';
+}
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !TOKEN) scannerLogin();
 });
 
-// ── Camera ────────────────────────────────────────────────────
+// ── Camera ─────────────────────────────────────────────────────
 async function startCamera() {
   if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
   const video  = document.getElementById('camera-video');
@@ -366,7 +436,7 @@ async function startCamera() {
     scanning = true;
     requestAnimationFrame(tick);
   } catch(e) {
-    status.textContent = '❌ Camera unavailable: ' + e.message;
+    status.textContent = '❌ Camera error: ' + e.message;
   }
 }
 
@@ -384,15 +454,13 @@ function tick() {
     if (code && code.data && code.data !== lastScanned) {
       lastScanned = code.data;
       handleQRScan(code.data);
-      setTimeout(() => { lastScanned = ''; }, 4000); // cooldown
+      setTimeout(() => { lastScanned = ''; }, 4000);
     }
   }
   requestAnimationFrame(tick);
 }
 
-function focusManual() {
-  document.getElementById('manual-query').focus();
-}
+function focusManual() { document.getElementById('manual-query').focus(); }
 
 // ── QR scan handler ────────────────────────────────────────────
 async function handleQRScan(token) {
@@ -410,9 +478,7 @@ async function handleQRScan(token) {
 function showResult(data, token) {
   const card = document.getElementById('result-card');
   card.style.display = 'block';
-
   const { status, name, ticket_uuid, message, used_at } = data;
-
   const iconEl   = document.getElementById('r-icon');
   const statusEl = document.getElementById('r-status');
   const nameEl   = document.getElementById('r-name');
@@ -428,7 +494,7 @@ function showResult(data, token) {
     uuidEl.textContent   = ticket_uuid || '';
     msgEl.textContent    = 'Ticket is valid. Confirm entry?';
     actEl.innerHTML = `
-      <button class="confirm-btn admit" onclick="admitUser('${ticket_uuid || token}')">✓ Admit Entry</button>
+      <button class="confirm-btn admit" onclick="admitUser('${esc(ticket_uuid || token)}')">✓ Admit Entry</button>
       <button class="confirm-btn clear" onclick="clearResult()">Cancel</button>
     `;
     vibrate([50]);
@@ -438,7 +504,7 @@ function showResult(data, token) {
     statusEl.textContent = 'ALREADY USED';
     nameEl.textContent   = name || '';
     uuidEl.textContent   = ticket_uuid || '';
-    msgEl.textContent    = `Used at: ${used_at || 'unknown'}`;
+    msgEl.textContent    = `Used at: ${used_at ? new Date(used_at).toLocaleTimeString() : 'unknown'}`;
     actEl.innerHTML = `<button class="confirm-btn clear" onclick="clearResult()">Dismiss</button>`;
     scanStats.used++;
     vibrate([100, 50, 100]);
@@ -463,7 +529,6 @@ async function admitUser(ticketId) {
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN }
     });
     const d = await r.json();
-
     if (d.status === 'VALID') {
       scanStats.valid++;
       updateStats();
@@ -471,8 +536,8 @@ async function admitUser(ticketId) {
       document.getElementById('r-actions').innerHTML = '<button class="confirm-btn clear" onclick="clearResult()">Next →</button>';
     } else if (d.status === 'ALREADY_USED') {
       document.getElementById('result-card').className = 'result-card used';
-      document.getElementById('r-status').textContent = 'ALREADY USED';
-      document.getElementById('r-msg').textContent = 'Was just used by someone else!';
+      document.getElementById('r-status').textContent  = 'ALREADY USED';
+      document.getElementById('r-msg').textContent     = 'Was just used by someone else!';
       scanStats.used++;
       updateStats();
     }
@@ -500,28 +565,28 @@ async function manualLookup() {
   const q = document.getElementById('manual-query').value.trim();
   if (!q) return;
   const resultsEl = document.getElementById('search-results');
-  resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2)">Searching…</p>';
+  resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2);padding:8px 0">Searching…</p>';
   try {
     const r = await fetch(`${API_BASE}/api/search-ticket?q=` + encodeURIComponent(q), {
       headers: { 'Authorization': 'Bearer ' + TOKEN }
     });
     const d = await r.json();
-    if (!d.results.length) {
-      resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2)">No results found</p>';
+    if (!d.results || !d.results.length) {
+      resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2);padding:8px 0">No results found</p>';
       return;
     }
     resultsEl.innerHTML = d.results.map(t => `
-      <div class="search-result-item" onclick="selectManualResult('${t.ticket_uuid}', '${esc(t.name)}')">
-        <div class="r-name">${esc(t.name)} ${t.is_used ? '🚫' : '✅'}</div>
-        <div class="r-meta">${esc(t.email)} · ${t.ticket_uuid} · ${t.is_used ? 'USED' : 'UNUSED'}</div>
+      <div class="search-result-item" onclick="selectManualResult('${esc(t.ticket_uuid)}')">
+        <div class="r-name">${esc(t.name)} ${t.is_used ? '🚫 USED' : '✅ VALID'}</div>
+        <div class="r-meta">${esc(t.email || '')} · ${esc(t.ticket_uuid)}</div>
       </div>
     `).join('');
   } catch(e) {
-    resultsEl.innerHTML = '<p style="font-size:12px;color:var(--red)">Error: ' + esc(e.message) + '</p>';
+    resultsEl.innerHTML = '<p style="font-size:12px;color:var(--red);padding:8px 0">Error: ' + esc(e.message) + '</p>';
   }
 }
 
-async function selectManualResult(uuid, name) {
+async function selectManualResult(uuid) {
   document.getElementById('search-results').innerHTML = '';
   document.getElementById('manual-query').value = '';
   const r = await fetch(`${API_BASE}/api/verify/` + encodeURIComponent(uuid), {
@@ -538,10 +603,8 @@ function updateStats() {
   document.getElementById('sc-invalid').textContent = scanStats.invalid;
 }
 
-// ── Utilities ──────────────────────────────────────────────────
-function vibrate(pattern) {
-  if ('vibrate' in navigator) navigator.vibrate(pattern);
-}
+// ── Utilities ─────────────────────────────────────────────────
+function vibrate(pattern) { if ('vibrate' in navigator) navigator.vibrate(pattern); }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&#34;');
 }
