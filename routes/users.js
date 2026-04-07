@@ -19,15 +19,8 @@ const upload = multer({
 });
 
 async function uploadScreenshot(file) {
-  if (!file) return null;
-  const ext  = path.extname(file.originalname).toLowerCase();
-  const name = `ss_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
-  const { error } = await supabase.storage
-    .from("screenshots")
-    .upload(name, file.buffer, { contentType: file.mimetype });
-  if (error) throw new Error("Screenshot upload failed: " + error.message);
-  const { data } = supabase.storage.from("screenshots").getPublicUrl(name);
-  return data.publicUrl;
+  // Screenshot upload disabled per user request to save on storage/API calls
+  return null;
 }
 
 // ── GET /api/users ────────────────────────────────────────────

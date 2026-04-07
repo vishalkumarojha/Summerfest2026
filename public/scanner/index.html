@@ -380,9 +380,7 @@ body {
 </div>
 
 <script>
-// ── Backend URL — reads from localStorage, falls back to Render/Railway URL
-// To update: open browser console → localStorage.setItem('sf_api_base','https://NEW-URL') → location.reload()
-const API_BASE = (localStorage.getItem('sf_api_base') || 'https://web-production-5bc38.up.railway.app').replace(/\/+$/, '');
+const API_BASE = (localStorage.getItem('sf_api_base') || 'https://summerfest2026.onrender.com').replace(/\/+$/, '');
 
 let TOKEN = '';
 let scanning = false;

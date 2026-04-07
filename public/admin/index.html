@@ -352,7 +352,8 @@ tr:hover td { background: rgba(124,58,237,0.05); }
 </div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────
+// ── Config ──────────────────────────────────────────────────────
+const API_BASE = (localStorage.getItem('sf_api_base') || 'https://summerfest2026.onrender.com').replace(/\/+$/, '');
 let TOKEN = localStorage.getItem('sf_token') || '';
 let currentPanel = 'dashboard';
 let usersPage = 1, ticketsPage = 1, logsPage = 1;
@@ -412,7 +413,7 @@ async function api(url, method='GET', body=null, auth=true) {
   if (auth) headers['Authorization'] = 'Bearer ' + TOKEN;
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(url, opts);
+  const r = await fetch(API_BASE + url, opts);
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -575,7 +576,7 @@ async function submitAddUser(e) {
 
   try {
     toast('Saving user...', 'info');
-    const r = await fetch('/api/users', {
+    const r = await fetch(API_BASE + '/api/users', {
       method: "POST",
       headers: { "Authorization": "Bearer " + TOKEN },
       body: formData
@@ -677,7 +678,7 @@ async function resendEmail(ticketUUID, ticketId, btn) {
 }
 
 function downloadPDF(uuid) {
-  window.open(`/api/tickets/${uuid}/download`, '_blank');
+  window.open(`${API_BASE}/api/tickets/${uuid}/download`, '_blank');
 }
 
 // ── Logs ───────────────────────────────────────────────────────
@@ -738,9 +739,8 @@ window.logsPage    = (p) => { logsPage    = p; loadLogs();    };
 
 // ── Export / Import ────────────────────────────────────────────
 function exportCSV(type) {
-  window.open(`/api/admin/export/${type}?token=${TOKEN}`, '_blank');
+  window.open(`${API_BASE}/api/admin/export/${type}?token=${TOKEN}`, '_blank');
   // Attach token as query param as fallback (not ideal, but works for file downloads)
-  // Better: use a short-lived signed URL or session cookie
 }
 
 async function uploadCSV(input) {
@@ -750,7 +750,7 @@ async function uploadCSV(input) {
   formData.append('csv', file);
   toast('Uploading and processing CSV...', 'info');
   try {
-    const res = await fetch('/api/admin/import/users', {
+    const res = await fetch(API_BASE + '/api/admin/import/users', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + TOKEN },
       body: formData
