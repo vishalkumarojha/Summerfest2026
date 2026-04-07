@@ -169,4 +169,11 @@ router.post("/:id/screenshot", requireAuth, upload.single("screenshot"), async (
   }
 });
 
+// ── DELETE /api/users/:id ────────────────────────────────────
+router.delete("/:id", requireAuth, async (req, res) => {
+  const { error } = await supabase.from("users").delete().eq("id", req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ message: "User deleted successfully" });
+});
+
 module.exports = router;

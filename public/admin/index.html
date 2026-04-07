@@ -498,6 +498,7 @@ function renderUsersTable(users) {
         ${canSuspect  ? `<button class="action-btn suspect" onclick="suspectUser(${u.id}, this)">⚠</button>` : ''}
         ${hasTicket   ? `<button class="action-btn resend"  onclick="resendEmail('${u.ticket_uuid}', ${u.t_id}, this)">📧 Resend</button>` : ''}
         ${hasTicket   ? `<button class="action-btn download" onclick="downloadPDF('${u.ticket_uuid}')">⬇ PDF</button>` : ''}
+        <button class="action-btn reject" onclick="deleteUser(${u.id}, this)">🗑</button>
       </div></td>
     </tr>`;
   }
@@ -526,6 +527,18 @@ async function rejectUser(id, btn) {
   } catch(e) { 
     toast(e.message, 'error');
     if (btn) { btn.disabled = false; btn.textContent = '✗ Reject'; }
+  }
+}
+
+async function deleteUser(id, btn) {
+  if (!confirm('Are you sure you want to permanently delete this user?')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+  try {
+    await api(`/api/users/${id}`, 'DELETE');
+    toast('User deleted', 'success'); loadUsers(); loadStats();
+  } catch(e) { 
+    toast(e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🗑'; }
   }
 }
 
