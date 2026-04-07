@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Summer Fest 2026 – Entry Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+:root {
+  --bg: #0a0014; --surface: #12002a; --accent: #7c3aed;
+  --green: #10b981; --red: #ef4444; --yellow: #f59e0b;
+  --text: #f0e6ff; --text2: #a78bca; --border: rgba(124,58,237,0.3);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+.header {
+  background: linear-gradient(135deg, #1a0533, #4c1d95);
+  padding: 16px 20px; text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+.header h1 { font-size: 18px; font-weight: 900; }
+.header p  { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+.container { max-width: 480px; margin: 0 auto; padding: 20px 16px; }
+
+/* ── Camera ── */
+.camera-section { position: relative; border-radius: 16px; overflow: hidden; margin-bottom: 20px; background: #000; }
+#camera-video { width: 100%; display: block; }
+#camera-canvas { display: none; }
+.scan-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+.scan-frame {
+  width: 200px; height: 200px; border: 3px solid rgba(255,255,255,0.6); border-radius: 16px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,0.4);
+  position: relative;
+}
+.scan-frame::before, .scan-frame::after {
+  content: ''; position: absolute; width: 24px; height: 24px;
+  border-color: var(--accent); border-style: solid;
+}
+.scan-frame::before { top: -3px; left: -3px; border-width: 4px 0 0 4px; border-radius: 8px 0 0 0; }
+.scan-frame::after  { bottom: -3px; right: -3px; border-width: 0 4px 4px 0; border-radius: 0 0 8px 0; }
+.scan-line {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: scanLine 2s ease-in-out infinite;
+}
+@keyframes scanLine {
+  0% { top: 10px; } 50% { top: calc(100% - 10px); } 100% { top: 10px; }
+}
+
+.camera-status {
+  padding: 8px 12px; text-align: center;
+  font-size: 12px; color: var(--text2); background: rgba(0,0,0,0.6);
+}
+
+/* ── Camera controls ── */
+.cam-controls { display: flex; gap: 8px; margin-bottom: 16px; }
+.cam-btn {
+  flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.cam-btn.active { background: var(--accent); border-color: var(--accent); }
+
+/* ── Manual lookup ── */
+.manual-section {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px; margin-bottom: 20px;
+}
+.manual-section h3 { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.manual-row { display: flex; gap: 8px; }
+.manual-input {
+  flex: 1; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 14px; outline: none;
+}
+.manual-input:focus { border-color: var(--accent); }
+.manual-btn {
+  padding: 10px 18px; background: var(--accent); border: none; border-radius: 10px;
+  color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.search-results { margin-top: 10px; }
+.search-result-item {
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+  margin-bottom: 6px; cursor: pointer; transition: background 0.15s;
+}
+.search-result-item:hover { background: rgba(124,58,237,0.1); }
+.search-result-item .r-name { font-weight: 700; font-size: 14px; }
+.search-result-item .r-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+/* ── Result card ── */
+.result-card {
+  border-radius: 16px; padding: 24px 20px; text-align: center;
+  margin-bottom: 20px; display: none; animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.result-card.valid     { background: rgba(16,185,129,0.1); border: 2px solid var(--green); }
+.result-card.used      { background: rgba(239,68,68,0.1);  border: 2px solid var(--red); }
+.result-card.invalid   { background: rgba(239,68,68,0.08); border: 2px solid rgba(239,68,68,0.5); }
+
+.result-icon   { font-size: 48px; margin-bottom: 10px; }
+.result-status { font-size: 24px; font-weight: 900; margin-bottom: 6px; }
+.result-name   { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.result-uuid   { font-size: 12px; font-family: monospace; color: var(--text2); margin-bottom: 4px; }
+.result-msg    { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
+.result-card.valid   .result-status { color: var(--green); }
+.result-card.used    .result-status { color: var(--red); }
+.result-card.invalid .result-status { color: var(--red); }
+
+.confirm-btn {
+  padding: 12px 28px; border-radius: 10px; border: none; font-size: 15px; font-weight: 800;
+  cursor: pointer; transition: opacity 0.15s;
+}
+.confirm-btn.admit  { background: var(--green); color: #fff; }
+.confirm-btn.clear  { background: var(--surface); color: var(--text2); border: 1px solid var(--border); margin-left: 8px; }
+.confirm-btn:hover  { opacity: 0.85; }
+
+/* ── Stats bar ── */
+.stats-bar {
+  display: flex; gap: 10px; margin-bottom: 16px;
+}
+.stats-mini {
+  flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 14px; text-align: center;
+}
+.stats-mini .n  { font-size: 22px; font-weight: 900; }
+.stats-mini .l  { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text2); margin-top: 2px; }
+
+/* ── Login guard ── */
+#scanner-login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.login-mini { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; max-width: 320px; width: 100%; }
+.login-mini h2 { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
+.login-mini input {
+  width: 100%; padding: 10px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 14px; outline: none; margin-bottom: 10px;
+}
+.login-mini button {
+  width: 100%; padding: 11px; background: var(--accent); border: none; border-radius: 8px;
+  color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.err { color: var(--red); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<!-- Login Guard -->
+<div id="scanner-login">
+  <div class="login-mini">
+    <h2>🎟 Gate Scanner</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Summer Fest 2026 · Entry Control</p>
+    <input type="text" id="s-user" placeholder="Username" autocomplete="username"/>
+    <input type="password" id="s-pass" placeholder="Password" autocomplete="current-password"/>
+    <button onclick="scannerLogin()">Enter →</button>
+    <div class="err" id="s-err"></div>
+  </div>
+</div>
+
+<!-- Scanner App (hidden until login) -->
+<div id="scanner-app" style="display:none">
+  <div class="header">
+    <h1>🎟 Summer Fest 2026 – Entry Gate</h1>
+    <p>Scan QR code to grant entry</p>
+  </div>
+
+  <div class="container">
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <div class="stats-mini"><div class="n" id="sc-valid" style="color:var(--green)">0</div><div class="l">Admitted</div></div>
+      <div class="stats-mini"><div class="n" id="sc-used"  style="color:var(--red)">0</div><div class="l">Duplicate</div></div>
+      <div class="stats-mini"><div class="n" id="sc-invalid" style="color:var(--yellow)">0</div><div class="l">Invalid</div></div>
+    </div>
+
+    <!-- Result card -->
+    <div class="result-card" id="result-card">
+      <div class="result-icon" id="r-icon">✅</div>
+      <div class="result-status" id="r-status">VALID</div>
+      <div class="result-name" id="r-name"></div>
+      <div class="result-uuid" id="r-uuid"></div>
+      <div class="result-msg" id="r-msg"></div>
+      <div id="r-actions"></div>
+    </div>
+
+    <!-- Camera controls -->
+    <div class="cam-controls">
+      <button class="cam-btn active" id="btn-camera" onclick="startCamera()">📷 Camera</button>
+      <button class="cam-btn" id="btn-manual" onclick="focusManual()">⌨ Manual</button>
+      <button class="cam-btn" style="flex:0;padding:10px 14px" onclick="clearResult()">✕</button>
+    </div>
+
+    <!-- Camera section -->
+    <div class="camera-section" id="camera-section">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <canvas id="camera-canvas"></canvas>
+      <div class="scan-overlay">
+        <div class="scan-frame">
+          <div class="scan-line"></div>
+        </div>
+      </div>
+      <div class="camera-status" id="cam-status">Starting camera…</div>
+    </div>
+
+    <!-- Manual search -->
+    <div class="manual-section">
+      <h3>🔍 Manual Lookup</h3>
+      <div class="manual-row">
+        <input type="text" class="manual-input" id="manual-query" placeholder="Name, email, or Ticket UUID…" oninput="debounceSearch()" onkeydown="if(event.key==='Enter')manualLookup()"/>
+        <button class="manual-btn" onclick="manualLookup()">Search</button>
+      </div>
+      <div class="search-results" id="search-results"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let TOKEN = '';
+let scanning = false;
+let videoStream = null;
+let scanStats = { valid: 0, used: 0, invalid: 0 };
+let lastScanned = '';
+let searchTimer = null;
+
+// ── Login ──────────────────────────────────────────────────────
+async function scannerLogin() {
+  const u = document.getElementById('s-user').value.trim();
+  const p = document.getElementById('s-pass').value;
+  document.getElementById('s-err').textContent = '';
+  try {
+    const r = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    TOKEN = d.token;
+    document.getElementById('scanner-login').style.display = 'none';
+    document.getElementById('scanner-app').style.display = 'block';
+    startCamera();
+  } catch(e) {
+    document.getElementById('s-err').textContent = e.message;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !TOKEN) scannerLogin();
+});
+
+// ── Camera ────────────────────────────────────────────────────
+async function startCamera() {
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
+  const video  = document.getElementById('camera-video');
+  const status = document.getElementById('cam-status');
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = videoStream;
+    await video.play();
+    status.textContent = '🟢 Camera active – point at QR code';
+    scanning = true;
+    requestAnimationFrame(tick);
+  } catch(e) {
+    status.textContent = '❌ Camera unavailable: ' + e.message;
+  }
+}
+
+function tick() {
+  if (!scanning) return;
+  const video  = document.getElementById('camera-video');
+  const canvas = document.getElementById('camera-canvas');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
+    if (code && code.data && code.data !== lastScanned) {
+      lastScanned = code.data;
+      handleQRScan(code.data);
+      setTimeout(() => { lastScanned = ''; }, 4000); // cooldown
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+function focusManual() {
+  document.getElementById('manual-query').focus();
+}
+
+// ── QR scan handler ────────────────────────────────────────────
+async function handleQRScan(token) {
+  // 1. Verify first (read-only)
+  try {
+    const r = await fetch('/api/verify/' + encodeURIComponent(token), { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const d = await r.json();
+    showResult(d, token);
+  } catch(e) {
+    showResult({ status: 'INVALID', message: 'Network error' }, token);
+  }
+}
+
+function showResult(data, token) {
+  const card = document.getElementById('result-card');
+  card.style.display = 'block';
+
+  const { status, name, ticket_uuid, message, used_at } = data;
+
+  const iconEl   = document.getElementById('r-icon');
+  const statusEl = document.getElementById('r-status');
+  const nameEl   = document.getElementById('r-name');
+  const uuidEl   = document.getElementById('r-uuid');
+  const msgEl    = document.getElementById('r-msg');
+  const actEl    = document.getElementById('r-actions');
+
+  if (status === 'VALID') {
+    card.className = 'result-card valid';
+    iconEl.textContent   = '✅';
+    statusEl.textContent = 'VALID';
+    nameEl.textContent   = name || '';
+    uuidEl.textContent   = ticket_uuid || '';
+    msgEl.textContent    = 'Ticket is valid. Confirm entry?';
+    actEl.innerHTML = `
+      <button class="confirm-btn admit" onclick="admitUser('${ticket_uuid || token}')">✓ Admit Entry</button>
+      <button class="confirm-btn clear" onclick="clearResult()">Cancel</button>
+    `;
+    vibrate([50]);
+  } else if (status === 'ALREADY_USED') {
+    card.className = 'result-card used';
+    iconEl.textContent   = '🚫';
+    statusEl.textContent = 'ALREADY USED';
+    nameEl.textContent   = name || '';
+    uuidEl.textContent   = ticket_uuid || '';
+    msgEl.textContent    = `Used at: ${used_at || 'unknown'}`;
+    actEl.innerHTML = `<button class="confirm-btn clear" onclick="clearResult()">Dismiss</button>`;
+    scanStats.used++;
+    vibrate([100, 50, 100]);
+  } else {
+    card.className = 'result-card invalid';
+    iconEl.textContent   = '❌';
+    statusEl.textContent = 'INVALID';
+    nameEl.textContent   = '';
+    uuidEl.textContent   = '';
+    msgEl.textContent    = message || 'Invalid or fake ticket';
+    actEl.innerHTML = `<button class="confirm-btn clear" onclick="clearResult()">Dismiss</button>`;
+    scanStats.invalid++;
+    vibrate([200]);
+  }
+  updateStats();
+}
+
+async function admitUser(ticketId) {
+  try {
+    const r = await fetch('/api/check-in/' + encodeURIComponent(ticketId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN }
+    });
+    const d = await r.json();
+
+    if (d.status === 'VALID') {
+      scanStats.valid++;
+      updateStats();
+      document.getElementById('r-msg').textContent = '✅ Entry granted! Welcome ' + (d.name||'') + '!';
+      document.getElementById('r-actions').innerHTML = '<button class="confirm-btn clear" onclick="clearResult()">Next →</button>';
+    } else if (d.status === 'ALREADY_USED') {
+      document.getElementById('result-card').className = 'result-card used';
+      document.getElementById('r-status').textContent = 'ALREADY USED';
+      document.getElementById('r-msg').textContent = 'Was just used by someone else!';
+      scanStats.used++;
+      updateStats();
+    }
+  } catch(e) {
+    document.getElementById('r-msg').textContent = 'Network error – try again';
+  }
+}
+
+function clearResult() {
+  const card = document.getElementById('result-card');
+  card.style.display = 'none';
+  card.className = 'result-card';
+  lastScanned = '';
+}
+
+// ── Manual search ──────────────────────────────────────────────
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  const q = document.getElementById('manual-query').value.trim();
+  if (q.length < 2) { document.getElementById('search-results').innerHTML = ''; return; }
+  searchTimer = setTimeout(manualLookup, 400);
+}
+
+async function manualLookup() {
+  const q = document.getElementById('manual-query').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('search-results');
+  resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2)">Searching…</p>';
+  try {
+    const r = await fetch('/api/search-ticket?q=' + encodeURIComponent(q), { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const d = await r.json();
+    if (!d.results.length) {
+      resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2)">No results found</p>';
+      return;
+    }
+    resultsEl.innerHTML = d.results.map(t => `
+      <div class="search-result-item" onclick="selectManualResult('${t.ticket_uuid}', '${esc(t.name)}')">
+        <div class="r-name">${esc(t.name)} ${t.is_used ? '🚫' : '✅'}</div>
+        <div class="r-meta">${esc(t.email)} · ${t.ticket_uuid} · ${t.is_used ? 'USED' : 'UNUSED'}</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    resultsEl.innerHTML = '<p style="font-size:12px;color:var(--red)">Error: ' + esc(e.message) + '</p>';
+  }
+}
+
+async function selectManualResult(uuid, name) {
+  document.getElementById('search-results').innerHTML = '';
+  document.getElementById('manual-query').value = '';
+  // Verify ticket
+  const r = await fetch('/api/verify/' + encodeURIComponent(uuid), { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+  const d = await r.json();
+  showResult(d, uuid);
+}
+
+// ── Stats ──────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('sc-valid').textContent   = scanStats.valid;
+  document.getElementById('sc-used').textContent    = scanStats.used;
+  document.getElementById('sc-invalid').textContent = scanStats.invalid;
+}
+
+// ── Utilities ──────────────────────────────────────────────────
+function vibrate(pattern) {
+  if ('vibrate' in navigator) navigator.vibrate(pattern);
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

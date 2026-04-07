@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Summer Fest 2026 – Admin</title>
+<style>
+:root {
+  --bg: #0d001a; --surface: #1a0533; --surface2: #2d0a5e;
+  --accent: #7c3aed; --accent2: #ec4899; --gold: #ffd700;
+  --text: #f0e6ff; --text2: #a78bca; --border: rgba(124,58,237,0.3);
+  --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --blue: #3b82f6;
+  --radius: 10px; --shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ── Login screen ── */
+#login-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 50% 0%, #2d0a5e 0%, #0d001a 70%);
+}
+.login-box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 44px 40px; width: 380px; box-shadow: var(--shadow);
+}
+.login-box h1 { font-size: 26px; font-weight: 800; margin-bottom: 4px; color: #fff; }
+.login-box p  { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+.form-group   { margin-bottom: 16px; }
+.form-group label { font-size: 12px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 6px; letter-spacing: 0.5px; }
+.form-group input {
+  width: 100%; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 14px; outline: none;
+  transition: border-color 0.2s;
+}
+.form-group input:focus { border-color: var(--accent); }
+.btn-primary {
+  width: 100%; padding: 12px; background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none; border-radius: var(--radius); color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: opacity 0.2s;
+}
+.btn-primary:hover { opacity: 0.9; }
+.error-msg { color: var(--red); font-size: 12px; margin-top: 10px; text-align: center; }
+
+/* ── Main app ── */
+#app { display: none; min-height: 100vh; }
+
+/* ── Sidebar ── */
+.sidebar {
+  position: fixed; left: 0; top: 0; bottom: 0; width: 220px;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 100; padding: 0;
+}
+.sidebar-logo {
+  padding: 22px 20px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo .logo-text { font-size: 15px; font-weight: 900; color: #fff; }
+.sidebar-logo .logo-sub  { font-size: 10px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+.sidebar-nav { flex: 1; padding: 12px 0; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+  color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer;
+  border-left: 3px solid transparent; transition: all 0.15s; user-select: none;
+}
+.nav-item:hover { background: rgba(124,58,237,0.1); color: var(--text); }
+.nav-item.active { border-left-color: var(--accent); color: var(--text); background: rgba(124,58,237,0.15); }
+.nav-icon { font-size: 16px; width: 20px; text-align: center; }
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); }
+.sidebar-footer small { font-size: 11px; color: var(--text2); }
+
+/* ── Main content ── */
+.main { margin-left: 220px; padding: 28px 32px; }
+
+/* ── Top bar ── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+.topbar h2 { font-size: 22px; font-weight: 800; color: #fff; }
+.btn-sm {
+  padding: 7px 16px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-sm:hover { background: var(--surface2); border-color: var(--accent); }
+.btn-sm.danger  { border-color: var(--red); color: var(--red); }
+.btn-sm.success { border-color: var(--green); color: var(--green); }
+.btn-sm.warning { border-color: var(--yellow); color: var(--yellow); }
+.btn-sm.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Stat cards ── */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 16px; margin-bottom: 28px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.stat-card .stat-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text2); margin-bottom: 6px; }
+.stat-card .stat-value { font-size: 30px; font-weight: 900; color: #fff; }
+.stat-card.accent { border-color: var(--accent); }
+.stat-card.green  { border-color: var(--green); }
+.stat-card.yellow { border-color: var(--yellow); }
+.stat-card.red    { border-color: var(--red); }
+.stat-card.gold   { border-color: var(--gold); }
+
+/* ── Table ── */
+.table-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.table-toolbar {
+  display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+  border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.search-input {
+  padding: 8px 14px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 13px; outline: none; width: 220px;
+}
+.search-input:focus { border-color: var(--accent); }
+.filter-btn {
+  padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text2); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 11px 14px; border-bottom: 1px solid rgba(124,58,237,0.1); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(124,58,237,0.05); }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+}
+.badge.pending    { background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+.badge.approved   { background: rgba(16,185,129,0.15); color: var(--green);  border: 1px solid rgba(16,185,129,0.3); }
+.badge.rejected   { background: rgba(239,68,68,0.15);  color: var(--red);    border: 1px solid rgba(239,68,68,0.3); }
+.badge.suspicious { background: rgba(239,68,68,0.1);   color: #f97316;       border: 1px solid rgba(249,115,22,0.4); }
+.badge.dup-utr    { background: rgba(249,115,22,0.2);  color: #fb923c;       border: 1px solid rgba(249,115,22,0.5); font-size: 10px; }
+
+/* ── Action buttons in table ── */
+.action-btn {
+  padding: 4px 10px; border-radius: 5px; border: none; font-size: 11px; font-weight: 700;
+  cursor: pointer; transition: opacity 0.15s; white-space: nowrap;
+}
+.action-btn:hover { opacity: 0.8; }
+.action-btn.approve  { background: var(--green); color: #fff; }
+.action-btn.reject   { background: var(--red);   color: #fff; }
+.action-btn.suspect  { background: #f97316;      color: #fff; }
+.action-btn.resend   { background: var(--blue);  color: #fff; }
+.action-btn.download { background: var(--accent);color: #fff; }
+.action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.actions-cell { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+
+/* ── Screenshot link ── */
+.ss-link { color: var(--accent); text-decoration: none; font-size: 11px; }
+.ss-link:hover { text-decoration: underline; }
+
+/* ── Pagination ── */
+.pagination { display: flex; align-items: center; gap: 8px; padding: 14px 16px; justify-content: flex-end; }
+.page-btn { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 12px; cursor: pointer; }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.page-info { font-size: 12px; color: var(--text2); }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+  padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4); opacity: 0;
+  transition: opacity 0.3s; pointer-events: none;
+}
+#toast.show { opacity: 1; }
+#toast.success { background: var(--green); color: #fff; }
+#toast.error   { background: var(--red);   color: #fff; }
+#toast.info    { background: var(--accent); color: #fff; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 500;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 28px; max-width: 500px; width: 100%; max-height: 80vh; overflow-y: auto;
+}
+.modal-box h3 { font-size: 17px; font-weight: 800; margin-bottom: 16px; }
+.modal-box img { max-width: 100%; border-radius: 8px; }
+.modal-close { float: right; background: none; border: none; color: var(--text2); font-size: 20px; cursor: pointer; }
+
+/* ── Loading ── */
+.loading { text-align: center; padding: 40px; color: var(--text2); font-size: 14px; }
+.spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Checkbox ── */
+.check-all, .row-check { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+/* ── Section panels ── */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ── Logs table compact ── */
+.logs-table td { font-size: 12px; padding: 8px 12px; }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; padding: 48px 20px; color: var(--text2); }
+.empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════ LOGIN ══════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>🎉 Summer Fest 2026</h1>
+    <p>Admin Dashboard · VIT Bhopal</p>
+    <div class="form-group">
+      <label>USERNAME</label>
+      <input type="text" id="l-user" placeholder="admin" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label>PASSWORD</label>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="btn-primary" onclick="doLogin()">Sign In →</button>
+    <div class="error-msg" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════ APP ════════════════════════════════════ -->
+<div id="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-text">🎉 Summer Fest</div>
+      <div class="logo-sub">Admin Console · 2026</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="switchPanel('dashboard')" id="nav-dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="switchPanel('users')" id="nav-users">
+        <span class="nav-icon">👥</span> Users
+      </div>
+      <div class="nav-item" onclick="switchPanel('tickets')" id="nav-tickets">
+        <span class="nav-icon">🎟</span> Tickets
+      </div>
+      <div class="nav-item" onclick="switchPanel('logs')" id="nav-logs">
+        <span class="nav-icon">📋</span> Scan Logs
+      </div>
+      <div class="nav-item" onclick="window.open('/scanner','_blank')" id="nav-scanner">
+        <span class="nav-icon">📷</span> Scanner ↗
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <small id="admin-name">Logged in</small><br/>
+      <small style="cursor:pointer;color:var(--accent)" onclick="doLogout()">Sign out</small>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="panel active" id="panel-dashboard">
+      <div class="topbar">
+        <h2>Dashboard</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm" onclick="exportCSV('users')">⬇ Export Users</button>
+          <button class="btn-sm" onclick="exportCSV('checkins')">⬇ Export Check-ins</button>
+          <button class="btn-sm primary" onclick="loadStats()">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="stat-label">Total Registered</div><div class="stat-value" id="s-total">–</div></div>
+        <div class="stat-card green"><div class="stat-label">Approved</div><div class="stat-value" id="s-approved">–</div></div>
+        <div class="stat-card yellow"><div class="stat-label">Pending</div><div class="stat-value" id="s-pending">–</div></div>
+        <div class="stat-card red"><div class="stat-label">Rejected</div><div class="stat-value" id="s-rejected">–</div></div>
+        <div class="stat-card accent"><div class="stat-label">Suspicious</div><div class="stat-value" id="s-suspicious">–</div></div>
+        <div class="stat-card gold"><div class="stat-label">Tickets Issued</div><div class="stat-value" id="s-tickets">–</div></div>
+        <div class="stat-card green"><div class="stat-label">Checked In</div><div class="stat-value" id="s-checkin">–</div></div>
+      </div>
+      <p style="font-size:13px;color:var(--text2)">Use the <strong>Users</strong> panel to verify payments, approve registrations, and send tickets.</p>
+    </div>
+
+    <!-- ── USERS ── -->
+    <div class="panel" id="panel-users">
+      <div class="topbar">
+        <h2>User Verification</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm success" onclick="bulkApprove()" id="bulk-approve-btn" disabled>✔ Bulk Approve Selected</button>
+          <button class="btn-sm" onclick="loadUsers()">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="table-container">
+        <div class="table-toolbar">
+          <input type="text" class="search-input" id="user-search" placeholder="🔍 Name, email, UTR…" oninput="debounceSearch()"/>
+          <button class="filter-btn active" onclick="setFilter('all')"   id="f-all">All</button>
+          <button class="filter-btn" onclick="setFilter('pending')"    id="f-pending">Pending</button>
+          <button class="filter-btn" onclick="setFilter('approved')"   id="f-approved">Approved</button>
+          <button class="filter-btn" onclick="setFilter('rejected')"   id="f-rejected">Rejected</button>
+          <button class="filter-btn" onclick="setFilter('suspicious')" id="f-suspicious">Suspicious</button>
+        </div>
+        <div id="users-table-wrap">
+          <div class="loading"><span class="spinner"></span>Loading…</div>
+        </div>
+        <div class="pagination" id="users-pagination"></div>
+      </div>
+    </div>
+
+    <!-- ── TICKETS ── -->
+    <div class="panel" id="panel-tickets">
+      <div class="topbar"><h2>Ticket Management</h2>
+        <button class="btn-sm" onclick="loadTickets()">↻ Refresh</button>
+      </div>
+      <div class="table-container">
+        <div id="tickets-table-wrap">
+          <div class="loading"><span class="spinner"></span>Loading…</div>
+        </div>
+        <div class="pagination" id="tickets-pagination"></div>
+      </div>
+    </div>
+
+    <!-- ── LOGS ── -->
+    <div class="panel" id="panel-logs">
+      <div class="topbar"><h2>Scan Logs</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm" onclick="exportCSV('checkins')">⬇ Export</button>
+          <button class="btn-sm" onclick="loadLogs()">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="table-container">
+        <div id="logs-table-wrap">
+          <div class="loading"><span class="spinner"></span>Loading…</div>
+        </div>
+        <div class="pagination" id="logs-pagination"></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box" id="modal-box"></div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+let TOKEN = localStorage.getItem('sf_token') || '';
+let currentPanel = 'dashboard';
+let usersPage = 1, ticketsPage = 1, logsPage = 1;
+let usersFilter = '', usersSearch = '';
+let selectedUsers = new Set();
+let searchTimer = null;
+
+// ── Bootstrap ──────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  if (TOKEN) showApp();
+});
+
+// ── Auth ───────────────────────────────────────────────────────
+async function doLogin() {
+  const u = document.getElementById('l-user').value.trim();
+  const p = document.getElementById('l-pass').value;
+  document.getElementById('login-err').textContent = '';
+  try {
+    const r = await api('/api/admin/login', 'POST', { username: u, password: p }, false);
+    TOKEN = r.token;
+    localStorage.setItem('sf_token', TOKEN);
+    document.getElementById('admin-name').textContent = r.username;
+    showApp();
+  } catch(e) {
+    document.getElementById('login-err').textContent = e.message || 'Login failed';
+  }
+}
+
+function doLogout() {
+  TOKEN = '';
+  localStorage.removeItem('sf_token');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadStats();
+}
+
+// ── Navigation ─────────────────────────────────────────────────
+function switchPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  currentPanel = name;
+  if (name === 'users')   { usersPage=1; loadUsers(); }
+  if (name === 'tickets') { ticketsPage=1; loadTickets(); }
+  if (name === 'logs')    { logsPage=1; loadLogs(); }
+}
+
+// ── API helper ─────────────────────────────────────────────────
+async function api(url, method='GET', body=null, auth=true) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (auth) headers['Authorization'] = 'Bearer ' + TOKEN;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+// ── Stats ──────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const s = await api('/api/admin/stats');
+    document.getElementById('s-total').textContent     = s.total;
+    document.getElementById('s-approved').textContent  = s.approved;
+    document.getElementById('s-pending').textContent   = s.pending;
+    document.getElementById('s-rejected').textContent  = s.rejected;
+    document.getElementById('s-suspicious').textContent = s.suspicious;
+    document.getElementById('s-tickets').textContent   = s.tickets;
+    document.getElementById('s-checkin').textContent   = s.checkedIn;
+  } catch(e) { toast('Failed to load stats', 'error'); }
+}
+
+// ── Users ──────────────────────────────────────────────────────
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { usersPage=1; loadUsers(); }, 350);
+}
+
+function setFilter(f) {
+  usersFilter = f === 'all' ? '' : f;
+  usersPage = 1;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('f-' + (f||'all')).classList.add('active');
+  loadUsers();
+}
+
+async function loadUsers() {
+  usersSearch = document.getElementById('user-search')?.value || '';
+  const params = new URLSearchParams({ page: usersPage, limit: 20 });
+  if (usersFilter) params.append('status', usersFilter);
+  if (usersSearch) params.append('search', usersSearch);
+
+  document.getElementById('users-table-wrap').innerHTML = '<div class="loading"><span class="spinner"></span>Loading…</div>';
+  try {
+    const d = await api('/api/users?' + params);
+    renderUsersTable(d.users);
+    renderPagination('users', d.page, d.total, 20);
+    selectedUsers.clear();
+    updateBulkBtn();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function renderUsersTable(users) {
+  if (!users.length) {
+    document.getElementById('users-table-wrap').innerHTML = '<div class="empty-state"><div class="emoji">🔍</div>No users found</div>';
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th><input type="checkbox" class="check-all" onchange="toggleAll(this)"/></th>
+    <th>Name</th><th>Email</th><th>UTR ID</th><th>Screenshot</th>
+    <th>Status</th><th>Actions</th>
+  </tr></thead><tbody>`;
+
+  for (const u of users) {
+    const dupBadge = u.duplicate_utr ? '<span class="badge dup-utr">⚠ DUP UTR</span>' : '';
+    const ss = u.screenshot_url
+      ? `<a class="ss-link" href="${u.screenshot_url}" target="_blank">📎 View</a>`
+      : '<span style="color:var(--text2);font-size:11px">—</span>';
+    const canApprove  = u.verification_status !== 'approved';
+    const canReject   = u.verification_status !== 'rejected';
+    const canSuspect  = u.verification_status !== 'suspicious';
+    const hasTicket   = !!u.ticket_uuid;
+
+    html += `<tr>
+      <td><input type="checkbox" class="row-check" value="${u.id}" onchange="toggleRow(${u.id}, this)"/></td>
+      <td><strong>${esc(u.name)}</strong><br/><small style="color:var(--text2)">#${u.id}</small></td>
+      <td style="font-size:12px">${esc(u.email)}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(u.utr_id||'—')} ${dupBadge}</td>
+      <td>${ss}</td>
+      <td><span class="badge ${u.verification_status}">${u.verification_status}</span></td>
+      <td><div class="actions-cell">
+        ${canApprove  ? `<button class="action-btn approve" onclick="approveUser(${u.id})">✓ Approve</button>` : ''}
+        ${canReject   ? `<button class="action-btn reject"  onclick="rejectUser(${u.id})">✗ Reject</button>` : ''}
+        ${canSuspect  ? `<button class="action-btn suspect" onclick="suspectUser(${u.id})">⚠</button>` : ''}
+        ${hasTicket   ? `<button class="action-btn resend"  onclick="resendEmail('${u.ticket_uuid}', ${u.t_id})">📧 Resend</button>` : ''}
+        ${hasTicket   ? `<button class="action-btn download" onclick="downloadPDF('${u.ticket_uuid}')">⬇ PDF</button>` : ''}
+      </div></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('users-table-wrap').innerHTML = html;
+}
+
+async function approveUser(id) {
+  try {
+    const r = await api(`/api/users/${id}/approve`, 'PATCH');
+    toast(`✅ Approved! Ticket: ${r.ticket_uuid}`, 'success');
+    loadUsers(); loadStats();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function rejectUser(id) {
+  const reason = prompt('Rejection reason (optional):') || '';
+  try {
+    await api(`/api/users/${id}/reject`, 'PATCH', { reason });
+    toast('Rejected', 'info'); loadUsers(); loadStats();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function suspectUser(id) {
+  const reason = prompt('Reason for suspicious flag:') || '';
+  try {
+    await api(`/api/users/${id}/suspicious`, 'PATCH', { reason });
+    toast('Marked suspicious', 'info'); loadUsers();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Bulk ───────────────────────────────────────────────────────
+function toggleAll(cb) {
+  document.querySelectorAll('.row-check').forEach(c => {
+    c.checked = cb.checked;
+    if (cb.checked) selectedUsers.add(parseInt(c.value));
+    else selectedUsers.delete(parseInt(c.value));
+  });
+  updateBulkBtn();
+}
+
+function toggleRow(id, cb) {
+  if (cb.checked) selectedUsers.add(id); else selectedUsers.delete(id);
+  updateBulkBtn();
+}
+
+function updateBulkBtn() {
+  const btn = document.getElementById('bulk-approve-btn');
+  btn.disabled = selectedUsers.size === 0;
+  btn.textContent = selectedUsers.size > 0
+    ? `✔ Bulk Approve (${selectedUsers.size})`
+    : '✔ Bulk Approve Selected';
+}
+
+async function bulkApprove() {
+  if (!selectedUsers.size) return;
+  if (!confirm(`Approve ${selectedUsers.size} users and send tickets?`)) return;
+  toast(`Processing ${selectedUsers.size} users…`, 'info');
+  try {
+    const r = await api('/api/users/bulk-approve', 'POST', { ids: [...selectedUsers] });
+    const ok = r.results.filter(x => x.status === 'approved').length;
+    toast(`✅ Approved ${ok}/${r.results.length}`, 'success');
+    loadUsers(); loadStats();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Tickets ────────────────────────────────────────────────────
+async function loadTickets() {
+  const params = new URLSearchParams({ page: ticketsPage, limit: 20 });
+  document.getElementById('tickets-table-wrap').innerHTML = '<div class="loading"><span class="spinner"></span>Loading…</div>';
+  try {
+    const d = await api('/api/tickets?' + params);
+    renderTicketsTable(d.tickets);
+    renderPagination('tickets', d.page, d.total, 20);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function renderTicketsTable(tickets) {
+  if (!tickets.length) {
+    document.getElementById('tickets-table-wrap').innerHTML = '<div class="empty-state"><div class="emoji">🎟</div>No tickets yet</div>';
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>Ticket UUID</th><th>Name</th><th>Email</th>
+    <th>Used?</th><th>Used At</th><th>Actions</th>
+  </tr></thead><tbody>`;
+  for (const t of tickets) {
+    html += `<tr>
+      <td style="font-family:monospace;font-weight:700;color:var(--gold)">${esc(t.ticket_uuid)}</td>
+      <td>${esc(t.name)}</td>
+      <td style="font-size:12px">${esc(t.email)}</td>
+      <td>${t.is_used ? '<span class="badge rejected">USED</span>' : '<span class="badge approved">UNUSED</span>'}</td>
+      <td style="font-size:12px">${t.used_at || '—'}</td>
+      <td><div class="actions-cell">
+        <button class="action-btn resend"   onclick="resendEmail('${t.ticket_uuid}', ${t.id})">📧 Resend</button>
+        <button class="action-btn download" onclick="downloadPDF('${t.ticket_uuid}')">⬇ PDF</button>
+      </div></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('tickets-table-wrap').innerHTML = html;
+}
+
+async function resendEmail(ticketUUID, ticketId) {
+  try {
+    const r = await api('/api/tickets/resend', 'POST', { ticket_id: ticketId });
+    toast(r.message, 'success');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function downloadPDF(uuid) {
+  window.open(`/api/tickets/${uuid}/download`, '_blank');
+}
+
+// ── Logs ───────────────────────────────────────────────────────
+async function loadLogs() {
+  const params = new URLSearchParams({ page: logsPage, limit: 50 });
+  document.getElementById('logs-table-wrap').innerHTML = '<div class="loading"><span class="spinner"></span>Loading…</div>';
+  try {
+    const d = await api('/api/admin/logs?' + params);
+    renderLogsTable(d.logs);
+    renderPagination('logs', d.page, d.total, 50);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function renderLogsTable(logs) {
+  if (!logs.length) {
+    document.getElementById('logs-table-wrap').innerHTML = '<div class="empty-state"><div class="emoji">📋</div>No scans yet</div>';
+    return;
+  }
+  let html = `<table class="logs-table"><thead><tr>
+    <th>#</th><th>Ticket UUID</th><th>Name</th><th>Email</th>
+    <th>Scan Time</th><th>Status</th><th>Scanner</th>
+  </tr></thead><tbody>`;
+  for (const l of logs) {
+    const cls = l.status === 'VALID' ? 'approved' : (l.status === 'ALREADY_USED' ? 'suspicious' : 'rejected');
+    html += `<tr>
+      <td>${l.id}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(l.ticket_uuid||'—')}</td>
+      <td>${esc(l.name||'—')}</td>
+      <td style="font-size:11px">${esc(l.email||'—')}</td>
+      <td>${esc(l.scan_time||'—')}</td>
+      <td><span class="badge ${cls}">${l.status}</span></td>
+      <td style="font-size:11px">${esc(l.scanned_by||'—')}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('logs-table-wrap').innerHTML = html;
+}
+
+// ── Pagination ─────────────────────────────────────────────────
+function renderPagination(type, page, total, limit) {
+  const totalPages = Math.ceil(total / limit);
+  const el = document.getElementById(type + '-pagination');
+  el.innerHTML = `
+    <button class="page-btn" onclick="${type}Page(${page-1})" ${page<=1?'disabled':''}>‹ Prev</button>
+    <span class="page-info">Page ${page} of ${totalPages} (${total} total)</span>
+    <button class="page-btn" onclick="${type}Page(${page+1})" ${page>=totalPages?'disabled':''}>Next ›</button>
+  `;
+}
+
+function usersPage_set(p)  { usersPage  = p; loadUsers();   }
+function ticketsPage_set(p){ ticketsPage = p; loadTickets(); }
+function logsPage_set(p)   { logsPage   = p; loadLogs();    }
+
+// Shorthand aliases called from rendered HTML
+window.usersPage   = (p) => { usersPage   = p; loadUsers();   };
+window.ticketsPage = (p) => { ticketsPage = p; loadTickets(); };
+window.logsPage    = (p) => { logsPage    = p; loadLogs();    };
+
+// ── Export ─────────────────────────────────────────────────────
+function exportCSV(type) {
+  window.open(`/api/admin/export/${type}?token=${TOKEN}`, '_blank');
+  // Attach token as query param as fallback (not ideal, but works for file downloads)
+  // Better: use a short-lived signed URL or session cookie
+}
+
+// ── Modal ──────────────────────────────────────────────────────
+function showModal(html) {
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+}
+
+// ── Toast ──────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ── Utilities ──────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Handle Enter key on login
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
+});
+
+// Add token to export links (alternative: use cookie auth)
+const origOpen = window.open;
+</script>
+</body>
+</html>
