@@ -19,14 +19,21 @@ app.use(helmet({ contentSecurityPolicy: false }));
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "https://summerfest2026.vercel.app",
+  "https://summerfest-scanner.vercel.app",
+  "https://summerfest2026.onrender.com",
   ...(process.env.ALLOWED_ORIGIN
-    ? process.env.ALLOWED_ORIGIN.split(",").map(o => o.trim())
+    ? process.env.ALLOWED_ORIGIN.split(",").map(o => o.trim().replace(/\/$/, ""))
     : []),
 ];
+
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error("CORS not allowed: " + origin));
+    if (!origin) return cb(null, true);
+    const normalized = origin.trim().replace(/\/$/, "");
+    if (ALLOWED_ORIGINS.includes(normalized)) return cb(null, true);
+    console.warn("CORS Blocked Origin:", normalized);
+    cb(null, false);
   },
   methods: ["GET", "POST", "PATCH", "DELETE"],
   allowedHeaders: ["Authorization", "Content-Type"],
