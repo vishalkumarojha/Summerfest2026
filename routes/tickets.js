@@ -1,23 +1,18 @@
 "use strict";
-const express   = require("express");
-const path      = require("path");
-const fs        = require("fs");
-const { getDB } = require("../db");
+const express  = require("express");
+const { supabase }    = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const { generateAndSendTicket } = require("../services/ticketService");
-const { sendTicketEmail } = require("../services/emailService");
+const { sendTicketEmail }       = require("../services/emailService");
 
 const router = express.Router();
 
-// POST /api/tickets/generate – manually trigger for a user
+// ── POST /api/tickets/generate ───────────────────────────────
 router.post("/generate", requireAuth, async (req, res) => {
   const { user_id } = req.body;
   if (!user_id) return res.status(400).json({ error: "user_id required" });
-
-  const db   = getDB();
-  const user = db.prepare("SELECT * FROM users WHERE id=?").get(user_id);
+  const { data: user } = await supabase.from("users").select("*").eq("id", user_id).single();
   if (!user) return res.status(404).json({ error: "User not found" });
-
   try {
     const ticket = await generateAndSendTicket(user_id);
     res.json({ message: "Ticket generated", ticket });
@@ -26,49 +21,40 @@ router.post("/generate", requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/tickets – list all tickets (admin)
-router.get("/", requireAuth, (req, res) => {
-  const db    = getDB();
+// ── GET /api/tickets ─────────────────────────────────────────
+router.get("/", requireAuth, async (req, res) => {
   const page  = parseInt(req.query.page)  || 1;
   const limit = parseInt(req.query.limit) || 50;
-  const offset = (page - 1) * limit;
+  const from  = (page - 1) * limit;
 
-  const tickets = db.prepare(`
-    SELECT t.*, u.name, u.email
-    FROM tickets t
-    JOIN users u ON u.id = t.user_id
-    ORDER BY t.created_at DESC
-    LIMIT ? OFFSET ?
-  `).all(limit, offset);
+  const { data: tickets, count } = await supabase
+    .from("tickets")
+    .select("*, users(name, email)", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, from + limit - 1);
 
-  const total = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
-  res.json({ tickets, total, page, limit });
+  res.json({ tickets: tickets || [], total: count || 0, page, limit });
 });
 
-// GET /api/tickets/:id – single ticket (admin)
-router.get("/:id", requireAuth, (req, res) => {
-  const db = getDB();
-  const t  = db.prepare(`
-    SELECT t.*, u.name, u.email, u.phone
-    FROM tickets t JOIN users u ON u.id = t.user_id
-    WHERE t.id = ? OR t.ticket_uuid = ?
-  `).get(req.params.id, req.params.id);
-
+// ── GET /api/tickets/:id ─────────────────────────────────────
+router.get("/:id", requireAuth, async (req, res) => {
+  const { data: t } = await supabase
+    .from("tickets")
+    .select("*, users(name, email, phone)")
+    .or(`id.eq.${req.params.id},ticket_uuid.eq.${req.params.id}`)
+    .single();
   if (!t) return res.status(404).json({ error: "Ticket not found" });
   res.json(t);
 });
 
-// POST /api/tickets/resend – resend email with PDF
+// ── POST /api/tickets/resend ─────────────────────────────────
 router.post("/resend", requireAuth, async (req, res) => {
   const { ticket_id } = req.body;
   if (!ticket_id) return res.status(400).json({ error: "ticket_id required" });
-
-  const db   = getDB();
-  const t    = db.prepare("SELECT * FROM tickets WHERE id=? OR ticket_uuid=?").get(ticket_id, ticket_id);
-  if (!t)    return res.status(404).json({ error: "Ticket not found" });
-
-  const user = db.prepare("SELECT * FROM users WHERE id=?").get(t.user_id);
-
+  const { data: t } = await supabase
+    .from("tickets").select("*").or(`id.eq.${ticket_id},ticket_uuid.eq.${ticket_id}`).single();
+  if (!t) return res.status(404).json({ error: "Ticket not found" });
+  const { data: user } = await supabase.from("users").select("*").eq("id", t.user_id).single();
   try {
     await sendTicketEmail(user, t);
     res.json({ message: "Email resent to " + user.email });
@@ -77,16 +63,20 @@ router.post("/resend", requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/tickets/:uuid/download – stream PDF by public ticket UUID
-router.get("/:uuid/download", (req, res) => {
-  const db = getDB();
-  const t  = db.prepare("SELECT pdf_path FROM tickets WHERE ticket_uuid=?").get(req.params.uuid);
-  if (!t || !t.pdf_path) return res.status(404).json({ error: "PDF not found" });
+// ── GET /api/tickets/:uuid/download ──────────────────────────
+// Returns a redirect to a Supabase Storage signed URL (60-min expiry)
+router.get("/:uuid/download", async (req, res) => {
+  const { data: t } = await supabase
+    .from("tickets").select("pdf_path").eq("ticket_uuid", req.params.uuid).single();
+  if (!t?.pdf_path) return res.status(404).json({ error: "PDF not found" });
 
-  const abs = path.resolve(t.pdf_path);
-  if (!fs.existsSync(abs)) return res.status(404).json({ error: "PDF file missing" });
+  // pdf_path is now a Storage object path like "SF26-XXXX.pdf"
+  const { data, error } = await supabase.storage
+    .from("tickets")
+    .createSignedUrl(t.pdf_path, 3600);
 
-  res.download(abs, `SF26_${req.params.uuid}.pdf`);
+  if (error) return res.status(500).json({ error: error.message });
+  res.redirect(data.signedUrl);
 });
 
 module.exports = router;

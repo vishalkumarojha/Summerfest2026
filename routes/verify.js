@@ -1,145 +1,99 @@
 "use strict";
-const express   = require("express");
-const jwt       = require("jsonwebtoken");
-const { getDB } = require("../db");
+const express = require("express");
+const jwt     = require("jsonwebtoken");
+const { supabase }              = require("../db");
 const { requireScannerOrAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
-/**
- * GET /api/verify/:token
- * Used by scanner to check a QR code token BEFORE marking as used.
- * Returns status without consuming the ticket.
- */
-router.get("/verify/:token", requireScannerOrAdmin, (req, res) => {
-  const db = getDB();
-  let payload;
+// ── GET /api/verify/:token ────────────────────────────────────
+router.get("/verify/:token", requireScannerOrAdmin, async (req, res) => {
   let ticketUuid = null;
 
   try {
-    payload = jwt.verify(req.params.token, process.env.JWT_SECRET);
+    const payload = jwt.verify(req.params.token, process.env.JWT_SECRET);
     ticketUuid = payload.ticket_uuid;
   } catch (e) {
-    // Fallback: allow direct verification by public ticket UUID for manual lookup flows.
     if (/^SF26-[A-Z0-9]+$/i.test(req.params.token)) {
       ticketUuid = req.params.token;
     } else {
-      logScan(db, null, req.params.token.slice(0, 50), "INVALID", req.admin.username, "JWT verification failed");
+      await logScan(null, req.params.token.slice(0, 50), "INVALID", req.admin.username, "JWT verification failed");
       return res.json({ status: "INVALID", message: "Invalid or tampered QR code" });
     }
   }
 
-  const ticket = db.prepare(`
-    SELECT t.*, u.name, u.email, u.phone
-    FROM tickets t JOIN users u ON u.id = t.user_id
-    WHERE t.ticket_uuid = ?
-  `).get(ticketUuid);
+  const { data: ticket } = await supabase
+    .from("tickets")
+    .select("*, users(name, email, phone)")
+    .eq("ticket_uuid", ticketUuid)
+    .single();
 
   if (!ticket) {
-    logScan(db, null, payload ? payload.ticket_uuid : ticketUuid, "INVALID", req.admin.username, "Ticket not found in DB");
+    await logScan(null, ticketUuid, "INVALID", req.admin.username, "Ticket not found in DB");
     return res.json({ status: "INVALID", message: "Ticket not found" });
   }
 
   if (ticket.is_used) {
     return res.json({
-      status: "ALREADY_USED",
-      message: "This ticket has already been used",
-      name:    ticket.name,
+      status:      "ALREADY_USED",
+      message:     "This ticket has already been used",
+      name:        ticket.users?.name,
       ticket_uuid: ticket.ticket_uuid,
-      used_at: ticket.used_at,
+      used_at:     ticket.used_at,
     });
   }
 
   res.json({
     status:      "VALID",
     message:     "Ticket is valid",
-    name:        ticket.name,
-    email:       ticket.email,
+    name:        ticket.users?.name,
+    email:       ticket.users?.email,
     ticket_uuid: ticket.ticket_uuid,
     ticket_id:   ticket.id,
   });
 });
 
-/**
- * POST /api/check-in/:ticket_id
- * Atomically marks ticket as USED (one-time gate operation).
- * Accepts ticket UUID as :ticket_id.
- */
-router.post("/check-in/:ticket_id", requireScannerOrAdmin, (req, res) => {
-  const db = getDB();
-
-  // Use a transaction to prevent race conditions with multiple scanners
-  const checkIn = db.transaction((uuid) => {
-    const ticket = db.prepare(`
-      SELECT t.*, u.name, u.email
-      FROM tickets t JOIN users u ON u.id = t.user_id
-      WHERE t.ticket_uuid = ?
-    `).get(uuid);
-
-    if (!ticket) {
-      logScan(db, null, uuid, "INVALID", req.admin.username, "Ticket not found");
-      return { status: "INVALID", message: "Ticket not found" };
-    }
-
-    if (ticket.is_used) {
-      logScan(db, ticket.id, uuid, "ALREADY_USED", req.admin.username, "Already used at " + ticket.used_at);
-      return {
-        status:      "ALREADY_USED",
-        message:     "Already used",
-        name:        ticket.name,
-        ticket_uuid: uuid,
-        used_at:     ticket.used_at,
-      };
-    }
-
-    // Mark as used
-    db.prepare("UPDATE tickets SET is_used=1, used_at=datetime('now'), scanned_by=? WHERE id=?").run(req.admin.username, ticket.id);
-    logScan(db, ticket.id, uuid, "VALID", req.admin.username, "Checked in successfully");
-
-    return {
-      status:      "VALID",
-      message:     "Entry granted ✓",
-      name:        ticket.name,
-      email:       ticket.email,
-      ticket_uuid: uuid,
-    };
-  });
-
+// ── POST /api/check-in/:ticket_id ────────────────────────────
+// Uses Postgres stored procedure do_checkin() for atomic race-safe check-in
+router.post("/check-in/:ticket_id", requireScannerOrAdmin, async (req, res) => {
   try {
-    const result = checkIn(req.params.ticket_id);
-    res.json(result);
+    const { data, error } = await supabase.rpc("do_checkin", {
+      p_uuid:       req.params.ticket_id,
+      p_scanned_by: req.admin.username,
+    });
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
     console.error("Check-in error:", e);
     res.status(500).json({ status: "ERROR", message: "Server error during check-in" });
   }
 });
 
-/**
- * GET /api/search-ticket?q=name_or_email_or_uuid
- * Manual lookup for entry gate (fallback if QR fails)
- */
-router.get("/search-ticket", requireScannerOrAdmin, (req, res) => {
-  const q  = (req.query.q || "").trim();
-  if (!q)  return res.status(400).json({ error: "Query required" });
+// ── GET /api/search-ticket?q= ────────────────────────────────
+router.get("/search-ticket", requireScannerOrAdmin, async (req, res) => {
+  const q = (req.query.q || "").trim();
+  if (!q) return res.status(400).json({ error: "Query required" });
 
-  const db = getDB();
-  const results = db.prepare(`
-    SELECT t.ticket_uuid, t.is_used, t.used_at, u.name, u.email, u.phone
-    FROM tickets t JOIN users u ON u.id = t.user_id
-    WHERE u.name LIKE ? OR u.email = ? OR t.ticket_uuid = ?
-    LIMIT 5
-  `).all(`%${q}%`, q, q);
+  const { data: results } = await supabase
+    .from("tickets")
+    .select("ticket_uuid, is_used, used_at, users(name, email, phone)")
+    .or(`users.name.ilike.%${q}%,users.email.eq.${q},ticket_uuid.eq.${q}`)
+    .limit(5);
 
-  res.json({ results });
+  res.json({ results: (results || []).map(t => ({
+    ticket_uuid: t.ticket_uuid,
+    is_used:     t.is_used,
+    used_at:     t.used_at,
+    name:        t.users?.name,
+    email:       t.users?.email,
+    phone:       t.users?.phone,
+  }))});
 });
 
 // ── helper ────────────────────────────────────────────────────
-function logScan(db, ticketId, uuid, status, ip, notes) {
+async function logScan(ticketId, uuid, status, scannedBy, notes) {
   try {
-    db.prepare(`
-      INSERT INTO scan_logs (ticket_id, ticket_uuid, status, scanned_by, notes)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(ticketId, uuid, status, ip, notes);
+    await supabase.from("scan_logs").insert({ ticket_id: ticketId, ticket_uuid: uuid, status, scanned_by: scannedBy, notes });
   } catch (_) {}
 }
 

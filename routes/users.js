@@ -1,28 +1,16 @@
 "use strict";
-const express   = require("express");
-const multer    = require("multer");
-const path      = require("path");
-const fs        = require("fs");
-const { getDB } = require("../db");
+const express  = require("express");
+const multer   = require("multer");
+const path     = require("path");
+const { supabase }    = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const { generateAndSendTicket } = require("../services/ticketService");
 
 const router = express.Router();
 
-// ── Multer config for screenshots ────────────────────────────
-const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, UPLOAD_DIR),
-  filename: (_, file, cb) => {
-    const ext  = path.extname(file.originalname).toLowerCase();
-    const name = `ss_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
-    cb(null, name);
-  },
-});
+// ── Multer: buffer in memory, upload to Supabase Storage ──────
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB) || 5) * 1024 * 1024 },
   fileFilter: (_, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".webp", ".pdf"];
@@ -30,160 +18,162 @@ const upload = multer({
   },
 });
 
-// ── GET /api/users – list with search & filter ───────────────
-router.get("/", requireAuth, (req, res) => {
-  const db      = getDB();
-  const status  = req.query.status  || null;
-  const search  = req.query.search  || "";
-  const page    = parseInt(req.query.page)  || 1;
-  const limit   = parseInt(req.query.limit) || 50;
-  const offset  = (page - 1) * limit;
+async function uploadScreenshot(file) {
+  if (!file) return null;
+  const ext  = path.extname(file.originalname).toLowerCase();
+  const name = `ss_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+  const { error } = await supabase.storage
+    .from("screenshots")
+    .upload(name, file.buffer, { contentType: file.mimetype });
+  if (error) throw new Error("Screenshot upload failed: " + error.message);
+  const { data } = supabase.storage.from("screenshots").getPublicUrl(name);
+  return data.publicUrl;
+}
 
-  let where  = "1=1";
-  const params = [];
+// ── GET /api/users ────────────────────────────────────────────
+router.get("/", requireAuth, async (req, res) => {
+  const status = req.query.status || null;
+  const search = (req.query.search || "").trim();
+  const page   = parseInt(req.query.page)  || 1;
+  const limit  = parseInt(req.query.limit) || 50;
+  const from   = (page - 1) * limit;
 
-  if (status) { where += " AND u.verification_status = ?"; params.push(status); }
-  if (search) {
-    where += " AND (u.name LIKE ? OR u.email LIKE ? OR u.utr_id LIKE ? OR u.registration_id LIKE ?)";
-    const s = `%${search}%`;
-    params.push(s, s, s, s);
-  }
+  let q = supabase
+    .from("users")
+    .select("*, tickets(ticket_uuid, is_used, used_at, id)", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, from + limit - 1);
 
-  const users = db.prepare(`
-    SELECT u.*, t.ticket_uuid, t.is_used, t.used_at, t.id AS t_id
-    FROM users u
-    LEFT JOIN tickets t ON t.user_id = u.id
-    WHERE ${where}
-    ORDER BY u.created_at DESC
-    LIMIT ? OFFSET ?
-  `).all(...params, limit, offset);
+  if (status) q = q.eq("verification_status", status);
+  if (search) q = q.or(
+    `name.ilike.%${search}%,email.ilike.%${search}%,utr_id.ilike.%${search}%,registration_id.ilike.%${search}%`
+  );
 
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM users u WHERE ${where}`).get(...params).n;
+  const { data: users, count, error } = await q;
+  if (error) return res.status(500).json({ error: error.message });
 
-  // Flag duplicate UTRs inline
+  // Flag duplicate UTRs
+  const { data: dupeUTRs } = await supabase.rpc("get_duplicate_utrs");
   const utrMap = {};
-  const allUTRs = db.prepare("SELECT utr_id, COUNT(*) AS cnt FROM users WHERE utr_id IS NOT NULL GROUP BY utr_id HAVING cnt > 1").all();
-  allUTRs.forEach(r => { utrMap[r.utr_id] = true; });
+  (dupeUTRs || []).forEach(r => { utrMap[r.utr_id] = true; });
 
-  const enriched = users.map(u => ({ ...u, duplicate_utr: !!utrMap[u.utr_id] }));
+  const enriched = (users || []).map(u => ({
+    ...u,
+    ticket_uuid: u.tickets?.[0]?.ticket_uuid || null,
+    is_used:     u.tickets?.[0]?.is_used     || false,
+    used_at:     u.tickets?.[0]?.used_at     || null,
+    t_id:        u.tickets?.[0]?.id          || null,
+    duplicate_utr: !!utrMap[u.utr_id],
+  }));
 
-  res.json({ users: enriched, total, page, limit });
+  res.json({ users: enriched, total: count || 0, page, limit });
 });
 
 // ── GET /api/users/:id ────────────────────────────────────────
-router.get("/:id", requireAuth, (req, res) => {
-  const db   = getDB();
-  const user = db.prepare(`
-    SELECT u.*, t.ticket_uuid, t.is_used, t.used_at, t.qr_token, t.pdf_path
-    FROM users u LEFT JOIN tickets t ON t.user_id = u.id
-    WHERE u.id = ?
-  `).get(req.params.id);
-
-  if (!user) return res.status(404).json({ error: "User not found" });
+router.get("/:id", requireAuth, async (req, res) => {
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("*, tickets(ticket_uuid, is_used, used_at, qr_token, pdf_path)")
+    .eq("id", req.params.id)
+    .single();
+  if (error || !user) return res.status(404).json({ error: "User not found" });
   res.json(user);
 });
 
-// ── POST /api/users – create / import single user ─────────────
-router.post("/", requireAuth, upload.single("screenshot"), (req, res) => {
-  const db = getDB();
+// ── POST /api/users – create single user ─────────────────────
+router.post("/", requireAuth, upload.single("screenshot"), async (req, res) => {
   const { name, email, phone, registration_id, utr_id } = req.body;
-
   if (!name || !email) return res.status(400).json({ error: "name and email required" });
 
-  const screenshot_url = req.file ? `/uploads/${req.file.filename}` : null;
+  let screenshot_url = null;
+  try { screenshot_url = await uploadScreenshot(req.file); } catch (e) { /* ignore */ }
 
   // Check duplicate UTR
   let status = "pending";
   if (utr_id) {
-    const existing = db.prepare("SELECT id FROM users WHERE utr_id = ? AND email != ?").get(utr_id, email);
+    const { data: existing } = await supabase
+      .from("users").select("id").eq("utr_id", utr_id).neq("email", email).single();
     if (existing) status = "suspicious";
   }
 
-  try {
-    const stmt = db.prepare(`
-      INSERT INTO users (name, email, phone, registration_id, utr_id, screenshot_url, verification_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const info = stmt.run(name, email, phone || null, registration_id || null, utr_id || null, screenshot_url, status);
-    res.status(201).json({ id: info.lastInsertRowid, status });
-  } catch (e) {
-    if (e.message.includes("UNIQUE")) return res.status(409).json({ error: "Email already registered" });
-    throw e;
+  const { data, error } = await supabase
+    .from("users")
+    .insert({ name, email, phone: phone||null, registration_id: registration_id||null,
+              utr_id: utr_id||null, screenshot_url, verification_status: status })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") return res.status(409).json({ error: "Email already registered" });
+    return res.status(500).json({ error: error.message });
   }
+  res.status(201).json({ id: data.id, status });
 });
 
 // ── PATCH /api/users/:id/approve ─────────────────────────────
 router.patch("/:id/approve", requireAuth, async (req, res) => {
-  const db   = getDB();
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+  const { data: user } = await supabase.from("users").select("*").eq("id", req.params.id).single();
   if (!user) return res.status(404).json({ error: "User not found" });
-  if (user.verification_status === "approved" && user.ticket_id) {
+  if (user.verification_status === "approved" && user.ticket_id)
     return res.status(409).json({ error: "Already approved and ticket issued" });
-  }
 
-  db.prepare("UPDATE users SET verification_status='approved', updated_at=datetime('now') WHERE id=?").run(user.id);
-
+  await supabase.from("users").update({ verification_status: "approved", updated_at: new Date().toISOString() }).eq("id", user.id);
   try {
     const ticket = await generateAndSendTicket(user.id);
     res.json({ message: "Approved and ticket sent", ticket_uuid: ticket.ticket_uuid });
   } catch (e) {
-    console.error("Ticket generation failed:", e);
     res.status(500).json({ error: "Approved but ticket generation failed: " + e.message });
   }
 });
 
 // ── PATCH /api/users/:id/reject ──────────────────────────────
-router.patch("/:id/reject", requireAuth, (req, res) => {
-  const db   = getDB();
-  const user = db.prepare("SELECT id FROM users WHERE id = ?").get(req.params.id);
-  if (!user) return res.status(404).json({ error: "User not found" });
-
-  db.prepare("UPDATE users SET verification_status='rejected', notes=?, updated_at=datetime('now') WHERE id=?")
-    .run(req.body.reason || null, req.params.id);
-
+router.patch("/:id/reject", requireAuth, async (req, res) => {
+  const { error } = await supabase.from("users")
+    .update({ verification_status: "rejected", notes: req.body.reason||null, updated_at: new Date().toISOString() })
+    .eq("id", req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ message: "User rejected" });
 });
 
 // ── PATCH /api/users/:id/suspicious ─────────────────────────
-router.patch("/:id/suspicious", requireAuth, (req, res) => {
-  const db = getDB();
-  db.prepare("UPDATE users SET verification_status='suspicious', notes=?, updated_at=datetime('now') WHERE id=?")
-    .run(req.body.reason || null, req.params.id);
+router.patch("/:id/suspicious", requireAuth, async (req, res) => {
+  await supabase.from("users")
+    .update({ verification_status: "suspicious", notes: req.body.reason||null, updated_at: new Date().toISOString() })
+    .eq("id", req.params.id);
   res.json({ message: "Marked suspicious" });
 });
 
-// ── PATCH /api/users/bulk-approve ────────────────────────────
+// ── POST /api/users/bulk-approve ─────────────────────────────
 router.post("/bulk-approve", requireAuth, async (req, res) => {
   const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) {
+  if (!Array.isArray(ids) || ids.length === 0)
     return res.status(400).json({ error: "ids array required" });
-  }
 
   const results = [];
   for (const id of ids) {
     try {
-      const db   = getDB();
-      const user = db.prepare("SELECT * FROM users WHERE id=? AND verification_status='pending'").get(id);
+      const { data: user } = await supabase.from("users").select("*").eq("id", id).eq("verification_status", "pending").single();
       if (!user) { results.push({ id, status: "skipped" }); continue; }
-
-      db.prepare("UPDATE users SET verification_status='approved', updated_at=datetime('now') WHERE id=?").run(id);
+      await supabase.from("users").update({ verification_status: "approved", updated_at: new Date().toISOString() }).eq("id", id);
       const ticket = await generateAndSendTicket(id);
       results.push({ id, status: "approved", ticket_uuid: ticket.ticket_uuid });
     } catch (e) {
       results.push({ id, status: "error", error: e.message });
     }
   }
-
   res.json({ results });
 });
 
-// ── POST /api/users/:id/screenshot – upload / replace screenshot
-router.post("/:id/screenshot", requireAuth, upload.single("screenshot"), (req, res) => {
+// ── POST /api/users/:id/screenshot ───────────────────────────
+router.post("/:id/screenshot", requireAuth, upload.single("screenshot"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  const db  = getDB();
-  const url = `/uploads/${req.file.filename}`;
-  db.prepare("UPDATE users SET screenshot_url=?, updated_at=datetime('now') WHERE id=?").run(url, req.params.id);
-  res.json({ screenshot_url: url });
+  try {
+    const url = await uploadScreenshot(req.file);
+    await supabase.from("users").update({ screenshot_url: url, updated_at: new Date().toISOString() }).eq("id", req.params.id);
+    res.json({ screenshot_url: url });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
