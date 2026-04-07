@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "name": "summerfest-scanner",
+  "builds": [
+    {
+      "src": "public/scanner/index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/public/scanner/index.html"
+    }
+  ]
+}

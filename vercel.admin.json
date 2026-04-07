@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "name": "summerfest-admin",
+  "builds": [
+    {
+      "src": "public/admin/index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/public/admin/index.html"
+    }
+  ]
+}
