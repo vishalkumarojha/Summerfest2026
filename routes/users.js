@@ -171,9 +171,44 @@ router.post("/:id/screenshot", requireAuth, upload.single("screenshot"), async (
 
 // ── DELETE /api/users/:id ────────────────────────────────────
 router.delete("/:id", requireAuth, async (req, res) => {
-  const { error } = await supabase.from("users").delete().eq("id", req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ message: "User deleted successfully" });
+  const userId = req.params.id;
+
+  try {
+    // 1. Break circular dependency if any by nullifying ticket_id on the user
+    await supabase.from("users").update({ ticket_id: null }).eq("id", userId);
+
+    // 2. Find explicit tickets for this user
+    const { data: tickets } = await supabase.from("tickets").select("id, pdf_path").eq("user_id", userId);
+
+    if (tickets && tickets.length > 0) {
+      const ticketIds = tickets.map(t => t.id);
+      const pdfPaths = tickets.map(t => t.pdf_path).filter(p => p);
+
+      // 3. Delete dependent rows
+      await Promise.all([
+        supabase.from("scan_logs").delete().in("ticket_id", ticketIds),
+        supabase.from("email_logs").delete().eq("user_id", userId)
+      ]);
+
+      // 4. Delete tickets
+      await supabase.from("tickets").delete().eq("user_id", userId);
+
+      // 5. Optionally remove physical files from storage
+      if (pdfPaths.length > 0) {
+        await supabase.storage.from("tickets").remove(pdfPaths);
+      }
+    } else {
+      await supabase.from("email_logs").delete().eq("user_id", userId);
+    }
+
+    // 6. Finally delete the user
+    const { error } = await supabase.from("users").delete().eq("id", userId);
+    if (error) throw error;
+
+    res.json({ message: "User and all associated data deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
