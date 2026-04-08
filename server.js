@@ -32,11 +32,11 @@ app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     const normalized = origin.trim().replace(/\/$/, "");
-    if (ALLOWED_ORIGINS.includes(normalized)) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(normalized) || normalized.includes(".vercel.app")) return cb(null, true);
     console.warn("CORS Blocked Origin:", normalized);
     cb(null, false);
   },
-  methods: ["GET", "POST", "PATCH", "DELETE"],
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Authorization", "Content-Type"],
 }));
 app.use(morgan("combined"));
