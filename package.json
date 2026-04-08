@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Summer Fest 2026 - VIT Bhopal Ticketing System",
   "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",

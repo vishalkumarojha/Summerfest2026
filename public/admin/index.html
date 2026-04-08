@@ -353,7 +353,7 @@ tr:hover td { background: rgba(124,58,237,0.05); }
 
 <script>
 // ── Config ──────────────────────────────────────────────────────
-const API_BASE = (localStorage.getItem('sf_api_base') || 'https://summerfest2026.onrender.com').replace(/\/+$/, '');
+const API_BASE = (localStorage.getItem('sf_api_base') || '').replace(/\/+$/, '');
 let TOKEN = localStorage.getItem('sf_token') || '';
 let currentPanel = 'dashboard';
 let usersPage = 1, ticketsPage = 1, logsPage = 1;
@@ -797,6 +797,10 @@ function closeModal() {
 // ── Toast ──────────────────────────────────────────────────────
 let toastTimer;
 function toast(msg, type='info') {
+  if (type === 'error') {
+    showModal(`<h3 style="color:var(--red);border-bottom:1px solid var(--border);padding-bottom:12px">⚠ Action Failed</h3><p style="font-size:14px;color:var(--text);margin:20px 0;line-height:1.5;white-space:pre-wrap;">${esc(msg)}</p><button class="btn-primary" onclick="closeModal()">Dismiss</button>`);
+    return;
+  }
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'show ' + type;

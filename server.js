@@ -11,6 +11,7 @@ const rateLimit = require("express-rate-limit");
 require("./db");
 
 const app = express();
+app.set("trust proxy", 1); // Trust Render's reverse proxy for rate-limiting
 const PORT = process.env.PORT || 3000;
 
 // ── Security middleware ───────────────────────────────────────
