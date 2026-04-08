@@ -15,13 +15,15 @@ function getTransport() {
     let defaultPort = 587;
     if (smtpUser.endsWith("@gmail.com")) {
       defaultHost = "smtp.gmail.com";
-      defaultPort = 587;
+      defaultPort = 465;
     }
+
+    const portToUse = parseInt(process.env.SMTP_PORT) || defaultPort;
 
     _transport = nodemailer.createTransport({
       host:   process.env.SMTP_HOST || defaultHost,
-      port:   parseInt(process.env.SMTP_PORT) || defaultPort,
-      secure: false,   // STARTTLS on port 587
+      port:   portToUse,
+      secure: portToUse === 465,   // true for port 465, false for 587 (uses STARTTLS)
       requireTLS: true,
       auth: {
         user: process.env.SMTP_USER,

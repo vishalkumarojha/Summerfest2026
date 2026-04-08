@@ -187,6 +187,11 @@ router.post("/:id/screenshot", requireAuth, upload.single("screenshot"), async (
 
 // ── DELETE /api/users/:id ────────────────────────────────────
 router.delete("/:id", requireAuth, async (req, res) => {
+  // 1. Delete associated email logs
+  await supabase.from("email_logs").delete().eq("user_id", req.params.id);
+  // 2. Delete associated tickets (this frees the foreign key constraint)
+  await supabase.from("tickets").delete().eq("user_id", req.params.id);
+  // 3. Delete user
   const { error } = await supabase.from("users").delete().eq("id", req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ message: "User deleted successfully" });
