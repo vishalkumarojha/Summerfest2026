@@ -1,23 +1,63 @@
 "use strict";
-const { Resend } = require("resend");
+const nodemailer = require("nodemailer");
 const { supabase } = require("../db");
 
-// Resend HTTP API — works on Render free tier (no SMTP ports needed)
-// Sign up free at https://resend.com → API Keys → Create Key
-// Set RESEND_API_KEY in your Render environment variables
+let _transport = null;
 
-let _resend = null;
-function getResend() {
-  if (!_resend) {
-    if (!process.env.RESEND_API_KEY) throw new Error("RESEND_API_KEY is not set in environment variables");
-    _resend = new Resend(process.env.RESEND_API_KEY);
+function getTransport() {
+  if (!_transport) {
+    // Detect correct SMTP host:
+    //  - @vitbhopal.ac.in / institutional Microsoft 365 → smtp.office365.com
+    //  - @gmail.com → smtp.gmail.com (App Password required)
+    //  - override via SMTP_HOST env
+    const smtpUser = process.env.SMTP_USER || "";
+    let defaultHost = "smtp.office365.com";
+    let defaultPort = 587;
+    if (smtpUser.endsWith("@gmail.com")) {
+      defaultHost = "smtp.gmail.com";
+      defaultPort = 587;
+    }
+
+    const host = process.env.SMTP_HOST || defaultHost;
+    const port = parseInt(process.env.SMTP_PORT) || defaultPort;
+
+    console.log(`📧 Creating SMTP transport → ${host}:${port} (user: ${smtpUser})`);
+
+    _transport = nodemailer.createTransport({
+      host,
+      port,
+      secure: false,        // false for port 587 (STARTTLS)
+      requireTLS: true,      // enforce upgrade to TLS
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      tls: {
+        rejectUnauthorized: false,   // accept self-signed certs (common on some networks)
+        minVersion: "TLSv1.2",       // Gmail requires TLS 1.2+
+      },
+      pool: false,           // disable pool — avoids stale connections on serverless
+      connectionTimeout: 30000,   // 30s — generous for slow networks
+      greetingTimeout:   30000,
+      socketTimeout:     30000,
+    });
+
+    // Verify connection on first creation
+    _transport.verify((err) => {
+      if (err) {
+        console.error("❌ SMTP verification failed:", err.message);
+        _transport = null;  // force re-creation on next attempt
+      } else {
+        console.log("✅ SMTP connection verified successfully");
+      }
+    });
   }
-  return _resend;
+  return _transport;
 }
 
 /**
- * Send ticket email using Resend HTTP API.
- * pdf_path is a Supabase Storage object key — downloads and attaches the PDF.
+ * Send ticket email. pdf_path is now a Supabase Storage object key.
+ * Downloads the PDF from Storage then attaches it.
  */
 async function sendTicketEmail(user, ticket, retries = 3) {
   // Download PDF bytes from Supabase Storage
@@ -35,33 +75,35 @@ async function sendTicketEmail(user, ticket, retries = 3) {
     venue: process.env.EVENT_VENUE || "Cricket Ground, VIT Bhopal",
   };
 
-  const fromAddress = process.env.EMAIL_FROM || `Summer Fest 2026 <onboarding@resend.dev>`;
+  const mailOptions = {
+    from:    process.env.EMAIL_FROM || `"${ev.name}" <${process.env.SMTP_USER}>`,
+    to:      user.email,
+    subject: `🎉 Your Ticket for ${ev.name} | ${ticket.ticket_uuid}`,
+    html:    buildEmailHTML(user, ticket, ev),
+    attachments: [{
+      filename: `SummerFest2026_${ticket.ticket_uuid}.pdf`,
+      content:  pdfBuffer,
+      contentType: "application/pdf",
+    }],
+  };
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const { data, error } = await getResend().emails.send({
-        from:    fromAddress,
-        to:      [user.email],
-        subject: `🎉 Your Ticket for ${ev.name} | ${ticket.ticket_uuid}`,
-        html:    buildEmailHTML(user, ticket, ev),
-        attachments: [{
-          filename:    `SummerFest2026_${ticket.ticket_uuid}.pdf`,
-          content:     pdfBuffer.toString("base64"),
-        }],
-      });
-
-      if (error) throw new Error(error.message || JSON.stringify(error));
-
+      const info = await getTransport().sendMail(mailOptions);
       await logEmail(user.id, ticket.id, "sent", null);
-      console.log(`✉️  Email sent to ${user.email} [id: ${data?.id}]`);
-      return data;
+      console.log(`✉️  Email sent to ${user.email} [${info.messageId}]`);
+      return info;
     } catch (e) {
       console.error(`Email attempt ${attempt} failed for ${user.email}: ${e.message}`);
+      // If auth/connection/timeout problem, force transport refresh on next attempt
+      if (["EAUTH", "ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNREFUSED"].includes(e.code) || e.responseCode === 535) {
+        _transport = null;
+      }
       if (attempt === retries) {
         await logEmail(user.id, ticket.id, "failed", e.message);
         throw new Error(`Email delivery failed after ${retries} attempts: ${e.message}`);
       }
-      await sleep(1000 * attempt);
+      await sleep(1000 * Math.pow(2, attempt));
     }
   }
 }
@@ -69,7 +111,7 @@ async function sendTicketEmail(user, ticket, retries = 3) {
 /**
  * Batch-send emails with rate limiting.
  */
-async function batchSendEmails(userTicketPairs, { chunkSize = 5, delayMs = 1000 } = {}) {
+async function batchSendEmails(userTicketPairs, { chunkSize = 10, delayMs = 2000 } = {}) {
   const results = [];
   for (let i = 0; i < userTicketPairs.length; i += chunkSize) {
     const chunk = userTicketPairs.slice(i, i + chunkSize);

@@ -187,14 +187,48 @@ router.post("/:id/screenshot", requireAuth, upload.single("screenshot"), async (
 
 // ── DELETE /api/users/:id ────────────────────────────────────
 router.delete("/:id", requireAuth, async (req, res) => {
-  // 1. Delete associated email logs
-  await supabase.from("email_logs").delete().eq("user_id", req.params.id);
-  // 2. Delete associated tickets (this frees the foreign key constraint)
-  await supabase.from("tickets").delete().eq("user_id", req.params.id);
-  // 3. Delete user
-  const { error } = await supabase.from("users").delete().eq("id", req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ message: "User deleted successfully" });
+  const userId = req.params.id;
+  try {
+    // 1. Find tickets belonging to this user
+    const { data: tickets } = await supabase
+      .from("tickets")
+      .select("id, ticket_uuid, pdf_path")
+      .eq("user_id", userId);
+
+    if (tickets && tickets.length > 0) {
+      const ticketIds = tickets.map(t => t.id);
+      const ticketUuids = tickets.map(t => t.ticket_uuid).filter(Boolean);
+
+      // 2. Delete scan_logs referencing these tickets (by ticket_uuid)
+      if (ticketUuids.length > 0) {
+        await supabase.from("scan_logs").delete().in("ticket_uuid", ticketUuids);
+      }
+
+      // 3. Delete email_logs referencing these tickets
+      await supabase.from("email_logs").delete().in("ticket_id", ticketIds);
+
+      // 4. Delete PDF files from Supabase Storage
+      const pdfPaths = tickets.map(t => t.pdf_path).filter(Boolean);
+      if (pdfPaths.length > 0) {
+        await supabase.storage.from("tickets").remove(pdfPaths);
+      }
+
+      // 5. Delete tickets
+      await supabase.from("tickets").delete().eq("user_id", userId);
+    }
+
+    // 6. Delete any remaining email_logs directly linked to user
+    await supabase.from("email_logs").delete().eq("user_id", userId);
+
+    // 7. Finally delete the user
+    const { error } = await supabase.from("users").delete().eq("id", userId);
+    if (error) return res.status(500).json({ error: error.message });
+
+    res.json({ message: "User and all related data deleted successfully" });
+  } catch (e) {
+    console.error("Delete user error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
