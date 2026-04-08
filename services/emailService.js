@@ -6,7 +6,7 @@ const { supabase } = require("../db");
  * Downloads the PDF from Storage, encodes it to Base64, and POSTs to Apps Script.
  */
 async function sendTicketEmail(user, ticket, retries = 3) {
-  const webhookUrl = process.env.APPS_SCRIPT_WEBHOOK_URL || "https://script.google.com/macros/s/AKfycbxkLmpoAw87LRKJwk02c7QfgBpt1RLl9It0xjCgoIKG0P2HbW3ZVhXAcb7FI9YZCO9Y/exec";
+  const webhookUrl = process.env.APPS_SCRIPT_WEBHOOK_URL || "https://script.google.com/macros/s/AKfycbz96WSuthY87jX5wK1wChZuQjUrlL_JvzB5ldXJSiw0YyM9u_iYuTfiU6kCq3EnQfhG/exec";
 
   // Download PDF bytes from Supabase Storage
   const { data: pdfData, error: dlErr } = await supabase.storage
