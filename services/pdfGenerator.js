@@ -1,155 +1,256 @@
 "use strict";
-const puppeteer = require("puppeteer-core");
-const chromium = require("@sparticuz/chromium");
-const QRCode    = require("qrcode");
+const { PDFDocument, StandardFonts, rgb, degrees } = require("pdf-lib");
+const QRCode = require("qrcode");
 const { supabase } = require("../db");
 
+// ── Colour palette ────────────────────────────────────────────
+const C = {
+  // dark purple background
+  bg:       rgb(0.051, 0.0,   0.102),  // #0d001a
+  bgMid:    rgb(0.102, 0.012, 0.2),    // #1a0333
+  // accent gold
+  gold:     rgb(1.0,   0.843, 0.0),    // #ffd700
+  goldDim:  rgb(0.9,   0.76,  0.0),
+  // accent purple/pink
+  violet:   rgb(0.486, 0.231, 0.929),  // #7c3aed
+  pink:     rgb(0.929, 0.302, 0.6),    // ed4d99
+  // right stub
+  stubBg:   rgb(0.961, 0.941, 1.0),    // #f5f0ff
+  stubPurp: rgb(0.486, 0.231, 0.929),
+  stubDark: rgb(0.298, 0.114, 0.584),
+  // text
+  white:    rgb(1, 1, 1),
+  offWhite: rgb(0.9, 0.88, 0.96),
+  gray:     rgb(0.65, 0.60, 0.72),
+};
+
 /**
- * Generates a premium A5-landscape PDF ticket, uploads to Supabase Storage.
- * @returns {string} storage object path (e.g. "SF26-XXXX.pdf")
+ * Generates a premium A5-landscape PDF ticket using pdf-lib (no browser needed),
+ * uploads it to Supabase Storage, and returns the storage file path.
+ *
+ * @param {object} user   – user row from Supabase
+ * @param {object} ticket – ticket row from Supabase (must have ticket_uuid, qr_token)
+ * @returns {string} Supabase Storage path, e.g. "SF26-XXXX.pdf"
  */
 async function generateTicketPDF(user, ticket) {
-  const qrDataURL = await QRCode.toDataURL(ticket.ticket_uuid, {
+  // ── 1. Generate QR code PNG from qr_token (the JWT) ─────────
+  const qrDataURL = await QRCode.toDataURL(ticket.qr_token || ticket.ticket_uuid, {
     errorCorrectionLevel: "H",
     margin: 1,
-    width: 360,
+    width: 300,
     color: { dark: "#1a0533", light: "#ffffff" },
   });
+  const qrImageBytes = Buffer.from(qrDataURL.split(",")[1], "base64");
 
-  const html = buildTicketHTML(user, ticket, qrDataURL);
+  // ── 2. Build PDF ─────────────────────────────────────────────
+  const pdfDoc = await PDFDocument.create();
 
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
-    ignoreHTTPSErrors: true,
+  // A5 landscape: 210mm × 148mm → 595 × 420 pt (approx)
+  const W = 595, H = 420;
+  const page = pdfDoc.addPage([W, H]);
+
+  // Embed fonts & QR image
+  const fontBold   = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontReg    = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const qrImage    = await pdfDoc.embedPng(qrImageBytes);
+
+  // ── 3. Left panel (dark gradient style via filled rects) ─────
+  const STUB_W = 130;  // right stub width
+  const LEFT_W = W - STUB_W;
+
+  // Background
+  drawRect(page, 0, 0, LEFT_W, H, C.bg);
+
+  // Decorative purple overlay bands
+  drawRect(page, 0, H * 0.55, LEFT_W * 0.6, H * 0.45, C.bgMid, 0.5);
+  drawRect(page, LEFT_W * 0.3, 0, LEFT_W * 0.7, H * 0.45, C.bgMid, 0.3);
+
+  // Dashed separator line (drawn as alternating dashes)
+  drawDashedLine(page, LEFT_W, 0, LEFT_W, H, C.gold, 0.4, 6, 5);
+
+  // ── Event badge row ──────────────────────────────────────────
+  const badgeY = H - 32;
+  drawRoundRect(page, 28, badgeY - 8, 170, 18, 9, rgb(1,0.843,0), 0.12);
+  // Badge border line (top)
+  page.drawLine({ start:{x:28,y:badgeY+10}, end:{x:198,y:badgeY+10}, thickness:0.8, color:C.goldDim, opacity:0.5 });
+  page.drawLine({ start:{x:28,y:badgeY-8}, end:{x:198,y:badgeY-8}, thickness:0.8, color:C.goldDim, opacity:0.5 });
+
+  // Gold dot
+  page.drawCircle({ x:42, y:badgeY+1, size:3, color:C.gold });
+
+  // Badge text
+  page.drawText("VIT BHOPAL · OFFICIAL TICKET", {
+    x: 52, y: badgeY - 2,
+    size: 6.5, font: fontBold, color: C.gold, opacity: 0.9,
   });
 
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-
-    const pdfBuffer = await page.pdf({
-      width:  "210mm",
-      height: "148mm",
-      printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-    });
-
-    // Upload to Supabase Storage (tickets bucket - private)
-    const filename = `${ticket.ticket_uuid}.pdf`;
-    const { error } = await supabase.storage
-      .from("tickets")
-      .upload(filename, pdfBuffer, { contentType: "application/pdf", upsert: true });
-
-    if (error) throw new Error("PDF Storage upload failed: " + error.message);
-    return filename;   // storage path, not a local fs path
-  } finally {
-    await browser.close();
-  }
-}
-
-// ── HTML template (unchanged, kept in full) ───────────────────
-function buildTicketHTML(user, ticket, qrDataURL) {
+  // ── Event Name ───────────────────────────────────────────────
   const ev = {
     name:        process.env.EVENT_NAME        || "Summer Fest 2026",
     date:        process.env.EVENT_DATE        || "8th April 2026",
     time:        process.env.EVENT_TIME        || "6PM - 10PM",
     venue:       process.env.EVENT_VENUE       || "Cricket Ground, VIT Bhopal",
-    description: process.env.EVENT_DESCRIPTION || "Bolly-Tech Experience · International DJ · Dance Performances",
+    description: process.env.EVENT_DESCRIPTION || "Bolly-Tech · International DJ · Dance Performances",
     price:       process.env.TICKET_PRICE      || "₹299",
   };
 
-  const displayName = user.name.toUpperCase();
-  const initials    = user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+  page.drawText(ev.name.toUpperCase(), {
+    x: 28, y: H - 70,
+    size: 26, font: fontBold, color: C.white,
+  });
+  page.drawText(ev.description, {
+    x: 28, y: H - 88,
+    size: 7, font: fontReg, color: C.gray,
+  });
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Raleway:wght@400;600;700&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 210mm; height: 148mm; overflow: hidden; }
-  body { font-family: 'Montserrat', sans-serif; background: #0d001a; display: flex; width: 210mm; height: 148mm; }
-  .left { flex: 1; background: linear-gradient(135deg, #0d001a 0%, #1a0533 40%, #2d0a5e 70%, #0d001a 100%); position: relative; overflow: hidden; padding: 22px 24px 18px 24px; display: flex; flex-direction: column; justify-content: space-between; border-right: 2px dashed rgba(255,215,0,0.35); }
-  .left::before { content: ''; position: absolute; top: -40px; right: -40px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(147,51,234,0.5) 0%, transparent 70%); border-radius: 50%; }
-  .left::after  { content: ''; position: absolute; bottom: -30px; left: 60px; width: 160px; height: 160px; background: radial-gradient(circle, rgba(255,165,0,0.3) 0%, transparent 70%); border-radius: 50%; }
-  .stars { position: absolute; inset: 0; background-image: radial-gradient(1px 1px at 20px 30px, rgba(255,255,255,0.5) 0%, transparent 100%), radial-gradient(1px 1px at 80px 60px, rgba(255,255,255,0.4) 0%, transparent 100%), radial-gradient(1px 1px at 150px 20px, rgba(255,255,255,0.3) 0%, transparent 100%), radial-gradient(1px 1px at 250px 80px, rgba(255,255,255,0.5) 0%, transparent 100%), radial-gradient(1px 1px at 320px 40px, rgba(255,255,255,0.3) 0%, transparent 100%); pointer-events: none; }
-  .header { position: relative; z-index: 1; }
-  .event-badge { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(90deg, rgba(255,215,0,0.15), rgba(147,51,234,0.15)); border: 1px solid rgba(255,215,0,0.4); border-radius: 20px; padding: 3px 10px; margin-bottom: 6px; }
-  .event-badge span { font-size: 7px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #ffd700; }
-  .dot { width: 5px; height: 5px; background: #ffd700; border-radius: 50%; }
-  .event-name { font-size: 28px; font-weight: 900; letter-spacing: -0.5px; background: linear-gradient(135deg, #ffffff 0%, #e879f9 40%, #ffd700 80%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1.1; margin-bottom: 2px; }
-  .event-tagline { font-size: 8px; font-weight: 600; letter-spacing: 2px; color: rgba(255,255,255,0.55); text-transform: uppercase; margin-bottom: 14px; }
-  .attendee-section { position: relative; z-index: 1; }
-  .attendee-label { font-size: 7px; font-weight: 700; letter-spacing: 2px; color: rgba(255,215,0,0.7); text-transform: uppercase; margin-bottom: 4px; }
-  .attendee-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .avatar { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; background: linear-gradient(135deg, #7c3aed, #ec4899); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; border: 2px solid rgba(255,215,0,0.5); }
-  .attendee-name { font-size: 17px; font-weight: 800; color: #fff; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
-  .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; position: relative; z-index: 1; margin-bottom: 14px; }
-  .detail-label { font-size: 6.5px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,215,0,0.6); text-transform: uppercase; margin-bottom: 2px; }
-  .detail-value { font-size: 9px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .detail-value.highlight { color: #e879f9; }
-  .bottom-bar { display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 1; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; }
-  .ticket-id-label { font-size: 6px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,215,0,0.6); text-transform: uppercase; margin-bottom: 2px; }
-  .ticket-id-value { font-size: 10px; font-weight: 800; color: #ffd700; letter-spacing: 1px; font-family: 'Courier New', monospace; }
-  .price-badge { background: linear-gradient(135deg, #7c3aed, #ec4899); border-radius: 20px; padding: 4px 14px; font-size: 12px; font-weight: 800; color: #fff; }
-  .organizer { font-size: 7px; color: rgba(255,255,255,0.35); font-weight: 600; letter-spacing: 0.5px; text-align: center; margin-top: 6px; }
-  .right { width: 108px; background: linear-gradient(180deg, #f5f0ff 0%, #ede8ff 100%); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 14px 10px 12px; position: relative; flex-shrink: 0; }
-  .right::before, .right::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #0d001a; }
-  .right::before { top: -8px; left: 50%; transform: translateX(-50%); }
-  .right::after  { bottom: -8px; left: 50%; transform: translateX(-50%); }
-  .right-label { font-size: 6px; font-weight: 800; letter-spacing: 1.5px; color: #7c3aed; text-transform: uppercase; text-align: center; }
-  .qr-frame { border: 3px solid #7c3aed; border-radius: 8px; padding: 4px; background: #fff; }
-  .qr-frame img { width: 82px; height: 82px; display: block; }
-  .scan-text { font-size: 5.5px; font-weight: 700; letter-spacing: 1px; color: #4c1d95; text-align: center; text-transform: uppercase; line-height: 1.4; }
-  .vertical-text { writing-mode: vertical-rl; text-orientation: mixed; font-size: 7px; font-weight: 800; letter-spacing: 2px; color: rgba(124,58,237,0.5); text-transform: uppercase; position: absolute; left: 5px; top: 50%; transform: translateY(-50%) rotate(180deg); }
-</style>
-</head>
-<body>
-  <div class="left">
-    <div class="stars"></div>
-    <div class="header">
-      <div class="event-badge"><div class="dot"></div><span>VIT Bhopal · Official Ticket</span></div>
-      <div class="event-name">${ev.name}</div>
-      <div class="event-tagline">${ev.description}</div>
-    </div>
-    <div class="attendee-section">
-      <div class="attendee-label">Attendee</div>
-      <div class="attendee-row">
-        <div class="avatar">${initials}</div>
-        <div>
-          <div class="attendee-name">${escapeHTML(displayName)}</div>
-          <div style="font-size:10px;color:#a78bca;margin-top:2px;font-weight:600;letter-spacing:1px;">Reg No: ${escapeHTML(user.registration_id||'N/A')}</div>
-        </div>
-      </div>
-    </div>
-    <div class="details-grid">
-      <div><div class="detail-label">📅 Date</div><div class="detail-value">${ev.date}</div></div>
-      <div><div class="detail-label">🕕 Time</div><div class="detail-value">${ev.time}</div></div>
-      <div><div class="detail-label">📍 Venue</div><div class="detail-value">${ev.venue}</div></div>
-      <div><div class="detail-label">✉️ Email</div><div class="detail-value highlight">${escapeHTML(user.email)}</div></div>
-    </div>
-    <div class="bottom-bar">
-      <div><div class="ticket-id-label">🎟 Ticket ID</div><div class="ticket-id-value">${ticket.ticket_uuid}</div></div>
-      <div class="price-badge">${escapeHTML(user.registration_id||'REG-NA')}</div>
-    </div>
-    <div class="organizer">© 2026 Summer Fest · VIT Bhopal · All Rights Reserved</div>
-  </div>
-  <div class="right">
-    <div class="vertical-text">Summer Fest 2026</div>
-    <div class="right-label">Scan to<br>Enter</div>
-    <div class="qr-frame"><img src="${qrDataURL}" alt="QR Code"/></div>
-    <div class="scan-text">One-time<br>entry only<br>· ${ticket.ticket_uuid}</div>
-  </div>
-</body>
-</html>`;
+  // ── Thin gold divider ────────────────────────────────────────
+  page.drawLine({ start:{x:28, y:H-100}, end:{x:LEFT_W-18, y:H-100}, thickness:0.5, color:C.gold, opacity:0.3 });
+
+  // ── Attendee section ─────────────────────────────────────────
+  page.drawText("ATTENDEE", {
+    x: 28, y: H - 118,
+    size: 6.5, font: fontBold, color: C.gold, opacity: 0.75,
+  });
+
+  // Avatar circle
+  page.drawCircle({ x: 50, y: H - 148, size: 20, color: C.violet });
+  const initials = (user.name || "??").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+  page.drawText(initials, {
+    x: initials.length === 1 ? 44 : 40,
+    y: H - 153,
+    size: 12, font: fontBold, color: C.white,
+  });
+
+  // Name & reg
+  const displayName = truncate(user.name || "Unknown", 32).toUpperCase();
+  page.drawText(displayName, {
+    x: 80, y: H - 141,
+    size: 15, font: fontBold, color: C.white,
+  });
+  page.drawText(`Reg No: ${user.registration_id || "N/A"}`, {
+    x: 80, y: H - 157,
+    size: 8.5, font: fontReg, color: rgb(0.654, 0.545, 0.792),
+  });
+
+  // ── Details grid ─────────────────────────────────────────────
+  const gridY = H - 195;
+  const col2  = 220;
+
+  renderDetailCell(page, fontBold, fontReg, 28, gridY, "DATE", ev.date);
+  renderDetailCell(page, fontBold, fontReg, col2, gridY, "TIME", ev.time);
+  renderDetailCell(page, fontBold, fontReg, 28, gridY - 36, "VENUE", truncate(ev.venue, 35));
+  renderDetailCell(page, fontBold, fontReg, col2, gridY - 36, "EMAIL", truncate(user.email || "", 28));
+
+  // ── Bottom bar ───────────────────────────────────────────────
+  const bottomY = 28;
+  page.drawLine({ start:{x:28,y:bottomY+40}, end:{x:LEFT_W-18, y:bottomY+40}, thickness:0.5, color:C.white, opacity:0.12 });
+
+  page.drawText("TICKET ID", { x:28, y:bottomY+28, size:6, font:fontBold, color:C.gold, opacity:0.7 });
+  page.drawText(ticket.ticket_uuid, { x:28, y:bottomY+12, size:11, font:fontBold, color:C.gold });
+
+  // Reg badge (pill)
+  const regLabel = user.registration_id || "REG-NA";
+  drawRoundRect(page, LEFT_W - 100, bottomY + 6, 82, 22, 11, C.violet, 1.0);
+  page.drawText(regLabel, { x: LEFT_W - 96, y: bottomY + 12, size: 8, font: fontBold, color: C.white });
+
+  // Footer
+  page.drawText("© 2026 Summer Fest · VIT Bhopal University · All Rights Reserved", {
+    x: 28, y: 10,
+    size: 5.5, font: fontReg, color: C.white, opacity: 0.25,
+  });
+
+  // ── 4. Right stub (QR panel) ─────────────────────────────────
+  drawRect(page, LEFT_W, 0, STUB_W, H, C.stubBg);
+
+  // Decorative circles (notch markers)
+  page.drawCircle({ x: LEFT_W, y: H + 9, size: 10, color: C.bg });
+  page.drawCircle({ x: LEFT_W, y: -9, size: 10, color: C.bg });
+
+  // "Scan to Enter" label
+  page.drawText("SCAN TO", { x: LEFT_W + 18, y: H - 30, size: 6, font: fontBold, color: C.violet });
+  page.drawText("ENTER", { x: LEFT_W + 22, y: H - 40, size: 6, font: fontBold, color: C.violet });
+
+  // QR Code image
+  const qrSize = 115;
+  const qrX = LEFT_W + (STUB_W - qrSize) / 2;
+  const qrY = (H - qrSize) / 2 - 10;
+  // White QR border
+  drawRect(page, qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, C.white);
+  page.drawLine({ start:{x:qrX-5, y:qrY+qrSize+5}, end:{x:qrX+qrSize+5, y:qrY+qrSize+5}, thickness:2.5, color:C.violet });
+  page.drawLine({ start:{x:qrX-5, y:qrY-5},         end:{x:qrX-5,         y:qrY+qrSize+5}, thickness:2.5, color:C.violet });
+  page.drawLine({ start:{x:qrX+qrSize+5, y:qrY-5},  end:{x:qrX+qrSize+5, y:qrY+qrSize+5}, thickness:2.5, color:C.violet });
+  page.drawLine({ start:{x:qrX-5, y:qrY-5},         end:{x:qrX+qrSize+5, y:qrY-5},        thickness:2.5, color:C.violet });
+
+  page.drawImage(qrImage, { x: qrX, y: qrY, width: qrSize, height: qrSize });
+
+  // Below QR text
+  page.drawText("One-time entry only", { x: LEFT_W + 10, y: qrY - 18, size: 6, font: fontBold, color: C.stubDark });
+  page.drawText(ticket.ticket_uuid, {
+    x: LEFT_W + 8, y: qrY - 32,
+    size: 5.5, font: fontBold, color: C.violet,
+  });
+
+  // Vertical rotated text on left edge of stub
+  page.drawText("SUMMER FEST 2026", {
+    x: LEFT_W + 10, y: H / 2 - 40,
+    size: 6.5, font: fontBold, color: rgb(0.486, 0.231, 0.929),
+    opacity: 0.35, rotate: degrees(90),
+  });
+
+  // ── 5. Save & upload to Supabase Storage ─────────────────────
+  const pdfBytes = await pdfDoc.save();
+  const filename = `${ticket.ticket_uuid}.pdf`;
+
+  const { error } = await supabase.storage
+    .from("tickets")
+    .upload(filename, pdfBytes, { contentType: "application/pdf", upsert: true });
+
+  if (error) throw new Error("PDF Storage upload failed: " + error.message);
+
+  console.log(`🎟️  PDF generated & uploaded: ${filename}`);
+  return filename;
 }
 
-function escapeHTML(str) {
-  return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+// ── Helpers ───────────────────────────────────────────────────
+
+function drawRect(page, x, y, w, h, color, opacity = 1.0) {
+  page.drawRectangle({ x, y, width: w, height: h, color, opacity });
+}
+
+/** Very basic rounded-rect approximation using overlapping rects + circles */
+function drawRoundRect(page, x, y, w, h, r, color, opacity = 1.0) {
+  page.drawRectangle({ x: x+r, y, width: w-2*r, height: h, color, opacity });
+  page.drawRectangle({ x, y: y+r, width: w, height: h-2*r, color, opacity });
+  page.drawCircle({ x: x+r,   y: y+r,   size: r, color, opacity });
+  page.drawCircle({ x: x+w-r, y: y+r,   size: r, color, opacity });
+  page.drawCircle({ x: x+r,   y: y+h-r, size: r, color, opacity });
+  page.drawCircle({ x: x+w-r, y: y+h-r, size: r, color, opacity });
+}
+
+function drawDashedLine(page, x1, y1, x2, y2, color, opacity, dashLen, gapLen) {
+  const totalLen = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+  const steps = Math.floor(totalLen / (dashLen + gapLen));
+  const dx = (x2 - x1) / totalLen;
+  const dy = (y2 - y1) / totalLen;
+  for (let i = 0; i < steps; i++) {
+    const startDist = i * (dashLen + gapLen);
+    const endDist   = startDist + dashLen;
+    page.drawLine({
+      start: { x: x1 + dx * startDist, y: y1 + dy * startDist },
+      end:   { x: x1 + dx * endDist,   y: y1 + dy * endDist },
+      thickness: 1.2, color, opacity,
+    });
+  }
+}
+
+function renderDetailCell(page, fontBold, fontReg, x, y, label, value) {
+  page.drawText(label, { x, y, size: 6, font: fontBold, color: C.gold, opacity: 0.65 });
+  page.drawText(value || "—", { x, y: y - 14, size: 8.5, font: fontBold, color: C.white });
+}
+
+function truncate(str, max) {
+  if (!str) return "";
+  return str.length > max ? str.slice(0, max - 1) + "…" : str;
 }
 
 module.exports = { generateTicketPDF };
