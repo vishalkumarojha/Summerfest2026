@@ -29,11 +29,15 @@ async function importCsvFile(csvFile) {
   const stats   = { inserted: 0, updated: 0, skipped: 0, suspicious: 0 };
 
   for (const r of records) {
-    const name           = r.name || r.full_name || "";
+    let name             = r.name || r.full_name || "";
     const email          = r.email || r.email_address || "";
     const phone          = r.phone || r.phone_number || null;
     const registrationId = r.registration_id || r.registration_number || r.reg_id || r.response_id || null;
     const utr            = r.utr_id || r.utr || r.transaction_id || r.payment_id || r["itr_id_/_transaction_id"] || null;
+
+    if (!name && email) {
+      name = registrationId || email.split("@")[0];
+    }
 
     if (!name || !email) { stats.skipped++; continue; }
 
