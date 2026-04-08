@@ -13,30 +13,35 @@ const router    = express.Router();
 
 // ─── POST /api/admin/login ────────────────────────────────────
 router.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password)
-    return res.status(400).json({ error: "Username and password required" });
+  try {
+    const { username, password } = req.body;
+    if (!username || !password)
+      return res.status(400).json({ error: "Username and password required" });
 
-  // Try admins first, then scanners
-  let role = "admin";
-  let { data: user } = await supabase
-    .from("admins").select("*").eq("username", username).single();
+    // Try admins first, then scanners
+    let role = "admin";
+    let { data: user } = await supabase
+      .from("admins").select("*").eq("username", username).single();
 
-  if (!user) {
-    role = "scanner";
-    ({ data: user } = await supabase
-      .from("scanners").select("*").eq("username", username).single());
+    if (!user) {
+      role = "scanner";
+      ({ data: user } = await supabase
+        .from("scanners").select("*").eq("username", username).single());
+    }
+
+    if (!user || !bcrypt.compareSync(password, user.password))
+      return res.status(401).json({ error: "Invalid credentials" });
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role },
+      process.env.JWT_SECRET,
+      { expiresIn: role === "scanner" ? "2h" : "12h" }
+    );
+    res.json({ token, username: user.username, role, expiresIn: role === "scanner" ? "2h" : "12h" });
+  } catch (error) {
+    console.error("Login Route Error:", error);
+    res.status(500).json({ error: error.message || "Internal server error during login" });
   }
-
-  if (!user || !bcrypt.compareSync(password, user.password))
-    return res.status(401).json({ error: "Invalid credentials" });
-
-  const token = jwt.sign(
-    { id: user.id, username: user.username, role },
-    process.env.JWT_SECRET,
-    { expiresIn: role === "scanner" ? "2h" : "12h" }
-  );
-  res.json({ token, username: user.username, role, expiresIn: role === "scanner" ? "2h" : "12h" });
 });
 
 // ─── GET /api/admin/stats ─────────────────────────────────────
