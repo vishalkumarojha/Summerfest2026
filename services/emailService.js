@@ -1,65 +1,14 @@
 "use strict";
-const nodemailer = require("nodemailer");
 const { supabase } = require("../db");
 
-let _transport = null;
-
-function getTransport() {
-  if (!_transport) {
-    // Detect correct SMTP host:
-    //  - @vitbhopal.ac.in / institutional Microsoft 365 → smtp.office365.com
-    //  - @gmail.com → smtp.gmail.com (App Password required)
-    //  - override via SMTP_HOST env
-    const smtpUser = process.env.SMTP_USER || "";
-    let defaultHost = "smtp.office365.com";
-    let defaultPort = 587;
-    if (smtpUser.endsWith("@gmail.com")) {
-      defaultHost = "smtp.gmail.com";
-      defaultPort = 587;
-    }
-
-    const host = process.env.SMTP_HOST || defaultHost;
-    const port = parseInt(process.env.SMTP_PORT) || defaultPort;
-
-    console.log(`📧 Creating SMTP transport → ${host}:${port} (user: ${smtpUser})`);
-
-    _transport = nodemailer.createTransport({
-      host,
-      port,
-      secure: false,        // false for port 587 (STARTTLS)
-      requireTLS: true,      // enforce upgrade to TLS
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,   // accept self-signed certs (common on some networks)
-        minVersion: "TLSv1.2",       // Gmail requires TLS 1.2+
-      },
-      pool: false,           // disable pool — avoids stale connections on serverless
-      connectionTimeout: 30000,   // 30s — generous for slow networks
-      greetingTimeout:   30000,
-      socketTimeout:     30000,
-    });
-
-    // Verify connection on first creation
-    _transport.verify((err) => {
-      if (err) {
-        console.error("❌ SMTP verification failed:", err.message);
-        _transport = null;  // force re-creation on next attempt
-      } else {
-        console.log("✅ SMTP connection verified successfully");
-      }
-    });
-  }
-  return _transport;
-}
-
 /**
- * Send ticket email. pdf_path is now a Supabase Storage object key.
- * Downloads the PDF from Storage then attaches it.
+ * Send ticket email via Google Apps Script Webhook.
+ * Downloads the PDF from Storage, encodes it to Base64, and POSTs to Apps Script.
  */
 async function sendTicketEmail(user, ticket, retries = 3) {
+  const webhookUrl = process.env.APPS_SCRIPT_WEBHOOK_URL;
+  if (!webhookUrl) throw new Error("APPS_SCRIPT_WEBHOOK_URL environment variable is missing.");
+
   // Download PDF bytes from Supabase Storage
   const { data: pdfData, error: dlErr } = await supabase.storage
     .from("tickets")
@@ -67,6 +16,7 @@ async function sendTicketEmail(user, ticket, retries = 3) {
   if (dlErr) throw new Error("PDF download from Storage failed: " + dlErr.message);
 
   const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
+  const attachmentBase64 = pdfBuffer.toString("base64");
 
   const ev = {
     name:  process.env.EVENT_NAME  || "Summer Fest 2026",
@@ -75,30 +25,34 @@ async function sendTicketEmail(user, ticket, retries = 3) {
     venue: process.env.EVENT_VENUE || "Cricket Ground, VIT Bhopal",
   };
 
-  const mailOptions = {
-    from:    process.env.EMAIL_FROM || `"${ev.name}" <${process.env.SMTP_USER}>`,
-    to:      user.email,
+  const payload = {
+    to: user.email,
     subject: `🎉 Your Ticket for ${ev.name} | ${ticket.ticket_uuid}`,
-    html:    buildEmailHTML(user, ticket, ev),
-    attachments: [{
-      filename: `SummerFest2026_${ticket.ticket_uuid}.pdf`,
-      content:  pdfBuffer,
-      contentType: "application/pdf",
-    }],
+    htmlBody: buildEmailHTML(user, ticket, ev),
+    eventName: ev.name,
+    attachmentName: `SummerFest2026_${ticket.ticket_uuid}.pdf`,
+    attachmentBase64: attachmentBase64
   };
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const info = await getTransport().sendMail(mailOptions);
-      await logEmail(user.id, ticket.id, "sent", null);
-      console.log(`✉️  Email sent to ${user.email} [${info.messageId}]`);
-      return info;
-    } catch (e) {
-      console.error(`Email attempt ${attempt} failed for ${user.email}: ${e.message}`);
-      // If auth/connection/timeout problem, force transport refresh on next attempt
-      if (["EAUTH", "ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNREFUSED"].includes(e.code) || e.responseCode === 535) {
-        _transport = null;
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      const responseData = await response.json();
+      
+      if (responseData.status !== "success") {
+        throw new Error(responseData.message || "Unknown error from Apps Script");
       }
+
+      await logEmail(user.id, ticket.id, "sent", null);
+      console.log(`✉️  Email sent via App Script to ${user.email}`);
+      return responseData;
+    } catch (e) {
+      console.error(`Email attempt ${attempt} failed via App Script for ${user.email}: ${e.message}`);
       if (attempt === retries) {
         await logEmail(user.id, ticket.id, "failed", e.message);
         throw new Error(`Email delivery failed after ${retries} attempts: ${e.message}`);
