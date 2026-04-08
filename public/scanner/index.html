@@ -500,14 +500,24 @@ function focusManual() { document.getElementById('manual-query').focus(); }
 
 // ── QR scan handler ────────────────────────────────────────────
 async function handleQRScan(token) {
+  const status = document.getElementById('cam-status');
+  status.textContent = '⏳ Verifying…';
   try {
-    const r = await fetch(`${API_BASE}/api/verify/` + encodeURIComponent(token), {
+    // Use GET with encoded token — if JWT is too long, fall back gracefully
+    const url = `${API_BASE}/api/verify/` + encodeURIComponent(token);
+    const r = await fetch(url, {
       headers: { 'Authorization': 'Bearer ' + TOKEN }
     });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ message: 'Server error ' + r.status }));
+      throw new Error(err.error || err.message || 'Verification failed');
+    }
     const d = await r.json();
+    status.textContent = '🟢 Camera active – point at QR code';
     showResult(d, token);
   } catch(e) {
-    showResult({ status: 'INVALID', message: 'Network error: ' + e.message }, token);
+    status.textContent = '🟢 Camera active – point at QR code';
+    showResult({ status: 'INVALID', message: 'Error: ' + e.message }, token);
   }
 }
 
@@ -525,12 +535,14 @@ function showResult(data, token) {
   if (status === 'VALID') {
     card.className = 'result-card valid';
     iconEl.textContent   = '✅';
-    statusEl.textContent = 'VALID';
-    nameEl.textContent   = name || '';
-    uuidEl.textContent   = ticket_uuid || '';
+    statusEl.textContent = 'VALID TICKET';
+    nameEl.textContent   = name || 'Unknown';
+    uuidEl.textContent   = ticket_uuid || token || '';
     msgEl.textContent    = 'Ticket is valid. Confirm entry?';
+    // Use ticket_uuid from response; fall back to the raw scanned value
+    const admitId = ticket_uuid || token;
     actEl.innerHTML = `
-      <button class="confirm-btn admit" onclick="admitUser('${esc(ticket_uuid || token)}')">✓ Admit Entry</button>
+      <button class="confirm-btn admit" onclick="admitUser('${esc(admitId)}')">✓ Admit Entry</button>
       <button class="confirm-btn clear" onclick="clearResult()">Cancel</button>
     `;
     vibrate([50]);
@@ -540,7 +552,7 @@ function showResult(data, token) {
     statusEl.textContent = 'ALREADY USED';
     nameEl.textContent   = name || '';
     uuidEl.textContent   = ticket_uuid || '';
-    msgEl.textContent    = `Used at: ${used_at ? new Date(used_at).toLocaleTimeString() : 'unknown'}`;
+    msgEl.textContent    = `Used at: ${used_at ? new Date(used_at).toLocaleTimeString('en-IN') : 'unknown'}`;
     actEl.innerHTML = `<button class="confirm-btn clear" onclick="clearResult()">Dismiss</button>`;
     scanStats.used++;
     vibrate([100, 50, 100]);
@@ -606,15 +618,16 @@ async function manualLookup() {
     const r = await fetch(`${API_BASE}/api/search-ticket?q=` + encodeURIComponent(q), {
       headers: { 'Authorization': 'Bearer ' + TOKEN }
     });
+    if (!r.ok) throw new Error('Server error ' + r.status);
     const d = await r.json();
     if (!d.results || !d.results.length) {
-      resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2);padding:8px 0">No results found</p>';
+      resultsEl.innerHTML = '<p style="font-size:12px;color:var(--text2);padding:8px 0">No results — try name, email, reg no, or ticket ID</p>';
       return;
     }
     resultsEl.innerHTML = d.results.map(t => `
       <div class="search-result-item" onclick="selectManualResult('${esc(t.ticket_uuid)}')">
-        <div class="r-name">${esc(t.name)} ${t.is_used ? '🚫 USED' : '✅ VALID'}</div>
-        <div class="r-meta">${esc(t.email || '')} · ${esc(t.ticket_uuid)}</div>
+        <div class="r-name">${esc(t.name || 'Unknown')} &nbsp;${t.is_used ? '🚫 USED' : '✅ VALID'}</div>
+        <div class="r-meta">${esc(t.email || '')}${t.phone ? ' · ' + esc(t.phone) : ''} · <span style="color:var(--accent2)">${esc(t.ticket_uuid)}</span></div>
       </div>
     `).join('');
   } catch(e) {

@@ -74,21 +74,53 @@ router.get("/search-ticket", requireScannerOrAdmin, async (req, res) => {
   const q = (req.query.q || "").trim();
   if (!q) return res.status(400).json({ error: "Query required" });
 
-  const { data: results } = await supabase
-    .from("tickets")
-    .select("ticket_uuid, is_used, used_at, users(name, email, phone)")
-    .or(`users.name.ilike.%${q}%,users.email.eq.${q},ticket_uuid.eq.${q}`)
-    .limit(5);
+  try {
+    let ticketResults = [];
 
-  res.json({ results: (results || []).map(t => ({
-    ticket_uuid: t.ticket_uuid,
-    is_used:     t.is_used,
-    used_at:     t.used_at,
-    name:        t.users?.name,
-    email:       t.users?.email,
-    phone:       t.users?.phone,
-  }))});
+    // 1. Direct ticket UUID match
+    if (/^SF26-/i.test(q)) {
+      const { data } = await supabase
+        .from("tickets")
+        .select("ticket_uuid, is_used, used_at, users(name, email, phone)")
+        .ilike("ticket_uuid", `%${q}%`)
+        .limit(5);
+      if (data) ticketResults = data;
+    } else {
+      // 2. Search users by name, email, or registration_id
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, name, email, phone, registration_id, tickets(ticket_uuid, is_used, used_at)")
+        .or(`name.ilike.%${q}%,email.ilike.%${q}%,registration_id.ilike.%${q}%`)
+        .limit(8);
+
+      if (users) {
+        ticketResults = users
+          .filter(u => u.tickets && u.tickets.length > 0)
+          .map(u => ({
+            ticket_uuid: u.tickets[0].ticket_uuid,
+            is_used:     u.tickets[0].is_used,
+            used_at:     u.tickets[0].used_at,
+            users:       { name: u.name, email: u.email, phone: u.phone },
+          }));
+      }
+    }
+
+    res.json({
+      results: ticketResults.map(t => ({
+        ticket_uuid: t.ticket_uuid,
+        is_used:     t.is_used,
+        used_at:     t.used_at,
+        name:        t.users?.name  || "",
+        email:       t.users?.email || "",
+        phone:       t.users?.phone || "",
+      }))
+    });
+  } catch (e) {
+    console.error("search-ticket error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
+
 
 // ── helper ────────────────────────────────────────────────────
 async function logScan(ticketId, uuid, status, scannedBy, notes) {

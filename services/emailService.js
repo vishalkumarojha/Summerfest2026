@@ -6,15 +6,32 @@ let _transport = null;
 
 function getTransport() {
   if (!_transport) {
+    // Detect correct SMTP host:
+    //  - @vitbhopal.ac.in / institutional Microsoft 365 → smtp.office365.com
+    //  - @gmail.com → smtp.gmail.com (App Password required)
+    //  - override via SMTP_HOST env
+    const smtpUser = process.env.SMTP_USER || "";
+    let defaultHost = "smtp.office365.com";
+    let defaultPort = 587;
+    if (smtpUser.endsWith("@gmail.com")) {
+      defaultHost = "smtp.gmail.com";
+      defaultPort = 587;
+    }
+
     _transport = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: parseInt(process.env.SMTP_PORT) || 587,
-      secure: false,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      pool: true,
-      maxConnections: 5,
-      rateDelta: 1000,
-      rateLimit: 5,
+      host:   process.env.SMTP_HOST || defaultHost,
+      port:   parseInt(process.env.SMTP_PORT) || defaultPort,
+      secure: false,   // STARTTLS on port 587
+      requireTLS: true,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      tls: { ciphers: "SSLv3" },
+      pool: false,    // disable pool — avoids stale connection issues on serverless
+      connectionTimeout: 10000,
+      greetingTimeout:   10000,
+      socketTimeout:     15000,
     });
   }
   return _transport;
