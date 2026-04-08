@@ -29,11 +29,18 @@ router.get("/", requireAuth, async (req, res) => {
 
   const { data: tickets, count } = await supabase
     .from("tickets")
-    .select("*, users(name, email)", { count: "exact" })
+    .select("id, ticket_uuid, is_used, used_at, scanned_by, pdf_path, created_at, users(name, email)", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, from + limit - 1);
 
-  res.json({ tickets: tickets || [], total: count || 0, page, limit });
+  const result = (tickets || []).map(t => ({
+    ...t,
+    name:  t.users?.name  || "",
+    email: t.users?.email || "",
+  }));
+
+  res.json({ tickets: result, total: count || 0, page, limit });
+
 });
 
 // ── GET /api/tickets/:id ─────────────────────────────────────

@@ -110,13 +110,20 @@ router.patch("/:id/approve", requireAuth, async (req, res) => {
   if (user.verification_status === "approved" && user.ticket_id)
     return res.status(409).json({ error: "Already approved and ticket issued" });
 
-  await supabase.from("users").update({ verification_status: "approved", updated_at: new Date().toISOString() }).eq("id", user.id);
-  try {
-    const ticket = await generateAndSendTicket(user.id);
-    res.json({ message: "Approved and ticket sent", ticket_uuid: ticket.ticket_uuid });
-  } catch (e) {
-    res.status(500).json({ error: "Approved but ticket generation failed: " + e.message });
-  }
+  // 1. Update status in DB immediately
+  await supabase.from("users")
+    .update({ verification_status: "approved", updated_at: new Date().toISOString() })
+    .eq("id", user.id);
+
+  // 2. Respond to the browser RIGHT AWAY — no waiting for PDF/email
+  res.json({ message: "Approved — ticket generation & email started", queued: true });
+
+  // 3. Generate PDF + send email in background (fire-and-forget)
+  generateAndSendTicket(user.id).then(ticket => {
+    console.log(`✅ Ticket issued for user ${user.id}: ${ticket.ticket_uuid}`);
+  }).catch(e => {
+    console.error(`❌ Ticket generation failed for user ${user.id}:`, e.message);
+  });
 });
 
 // ── PATCH /api/users/:id/reject ──────────────────────────────
@@ -142,19 +149,28 @@ router.post("/bulk-approve", requireAuth, async (req, res) => {
   if (!Array.isArray(ids) || ids.length === 0)
     return res.status(400).json({ error: "ids array required" });
 
-  const results = [];
+  // Filter to only pending users, update status for all at once
+  const pendingResults = [];
   for (const id of ids) {
-    try {
-      const { data: user } = await supabase.from("users").select("*").eq("id", id).eq("verification_status", "pending").single();
-      if (!user) { results.push({ id, status: "skipped" }); continue; }
-      await supabase.from("users").update({ verification_status: "approved", updated_at: new Date().toISOString() }).eq("id", id);
-      const ticket = await generateAndSendTicket(id);
-      results.push({ id, status: "approved", ticket_uuid: ticket.ticket_uuid });
-    } catch (e) {
-      results.push({ id, status: "error", error: e.message });
+    const { data: user } = await supabase.from("users").select("*").eq("id", id).eq("verification_status", "pending").single();
+    if (!user) { pendingResults.push({ id, status: "skipped" }); continue; }
+    await supabase.from("users").update({ verification_status: "approved", updated_at: new Date().toISOString() }).eq("id", id);
+    pendingResults.push({ id, status: "approved", user });
+  }
+
+  // Respond immediately with the list of what was approved
+  res.json({ results: pendingResults.map(r => ({ id: r.id, status: r.status })) });
+
+  // Fire PDF+email generation in background for all approved users
+  for (const r of pendingResults) {
+    if (r.status === "approved" && r.user) {
+      generateAndSendTicket(r.id).then(ticket => {
+        console.log(`✅ Bulk ticket issued for user ${r.id}: ${ticket.ticket_uuid}`);
+      }).catch(e => {
+        console.error(`❌ Bulk ticket failed for user ${r.id}:`, e.message);
+      });
     }
   }
-  res.json({ results });
 });
 
 // ── POST /api/users/:id/screenshot ───────────────────────────
@@ -171,44 +187,9 @@ router.post("/:id/screenshot", requireAuth, upload.single("screenshot"), async (
 
 // ── DELETE /api/users/:id ────────────────────────────────────
 router.delete("/:id", requireAuth, async (req, res) => {
-  const userId = req.params.id;
-
-  try {
-    // 1. Break circular dependency if any by nullifying ticket_id on the user
-    await supabase.from("users").update({ ticket_id: null }).eq("id", userId);
-
-    // 2. Find explicit tickets for this user
-    const { data: tickets } = await supabase.from("tickets").select("id, pdf_path").eq("user_id", userId);
-
-    if (tickets && tickets.length > 0) {
-      const ticketIds = tickets.map(t => t.id);
-      const pdfPaths = tickets.map(t => t.pdf_path).filter(p => p);
-
-      // 3. Delete dependent rows
-      await Promise.all([
-        supabase.from("scan_logs").delete().in("ticket_id", ticketIds),
-        supabase.from("email_logs").delete().eq("user_id", userId)
-      ]);
-
-      // 4. Delete tickets
-      await supabase.from("tickets").delete().eq("user_id", userId);
-
-      // 5. Optionally remove physical files from storage
-      if (pdfPaths.length > 0) {
-        await supabase.storage.from("tickets").remove(pdfPaths);
-      }
-    } else {
-      await supabase.from("email_logs").delete().eq("user_id", userId);
-    }
-
-    // 6. Finally delete the user
-    const { error } = await supabase.from("users").delete().eq("id", userId);
-    if (error) throw error;
-
-    res.json({ message: "User and all associated data deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const { error } = await supabase.from("users").delete().eq("id", req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ message: "User deleted successfully" });
 });
 
 module.exports = router;

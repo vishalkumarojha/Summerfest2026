@@ -496,6 +496,7 @@ function renderUsersTable(users) {
         ${canApprove  ? `<button class="action-btn approve" onclick="approveUser(${u.id}, this)">✓ Approve</button>` : ''}
         ${canReject   ? `<button class="action-btn reject"  onclick="rejectUser(${u.id}, this)">✗ Reject</button>` : ''}
         ${canSuspect  ? `<button class="action-btn suspect" onclick="suspectUser(${u.id}, this)">⚠</button>` : ''}
+        ${u.verification_status === 'approved' && !hasTicket ? `<span style="font-size:10px;color:var(--yellow)">⏳ Ticket pending</span>` : ''}
         ${hasTicket   ? `<button class="action-btn resend"  onclick="resendEmail('${u.ticket_uuid}', ${u.t_id}, this)">📧 Resend</button>` : ''}
         ${hasTicket   ? `<button class="action-btn download" onclick="downloadPDF('${u.ticket_uuid}')">⬇ PDF</button>` : ''}
         <button class="action-btn reject" onclick="deleteUser(${u.id}, this)">🗑</button>
@@ -507,11 +508,12 @@ function renderUsersTable(users) {
 }
 
 async function approveUser(id, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Approving...'; }
   try {
-    const r = await api(`/api/users/${id}/approve`, 'PATCH');
-    toast(`✅ Approved! Ticket sent: ${r.ticket_uuid}`, 'success');
-    loadUsers(); loadStats();
+    await api(`/api/users/${id}/approve`, 'PATCH');
+    toast('✅ Approved! Ticket & email are being generated in background.', 'success');
+    // Reload after a short delay so the status badge updates
+    setTimeout(() => { loadUsers(); loadStats(); }, 800);
   } catch(e) { 
     toast(e.message, 'error'); 
     if (btn) { btn.disabled = false; btn.textContent = '✓ Approve'; }
@@ -716,14 +718,18 @@ function renderLogsTable(logs) {
   </tr></thead><tbody>`;
   for (const l of logs) {
     const cls = l.status === 'VALID' ? 'approved' : (l.status === 'ALREADY_USED' ? 'suspicious' : 'rejected');
+    // API returns: l.tickets.users.name  (nested join)
+    const userName  = l.tickets?.users?.name  || l.name  || '—';
+    const userEmail = l.tickets?.users?.email || l.email || '—';
+    const scanTime  = l.scan_time ? new Date(l.scan_time).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'}) : '—';
     html += `<tr>
       <td>${l.id}</td>
-      <td style="font-family:monospace;font-size:11px">${esc(l.ticket_uuid||'—')}</td>
-      <td>${esc(l.name||'—')}</td>
-      <td style="font-size:11px">${esc(l.email||'—')}</td>
-      <td>${esc(l.scan_time||'—')}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--gold)">${esc(l.ticket_uuid||'—')}</td>
+      <td><strong>${esc(userName)}</strong></td>
+      <td style="font-size:11px">${esc(userEmail)}</td>
+      <td style="font-size:11px">${scanTime}</td>
       <td><span class="badge ${cls}">${l.status}</span></td>
-      <td style="font-size:11px">${esc(l.scanned_by||'—')}</td>
+      <td style="font-size:11px;font-weight:700;color:var(--accent)">${esc(l.scanned_by||'—')}</td>
     </tr>`;
   }
   html += '</tbody></table>';

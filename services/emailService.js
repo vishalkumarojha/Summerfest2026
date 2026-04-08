@@ -59,10 +59,14 @@ async function sendTicketEmail(user, ticket, retries = 3) {
       console.log(`✉️  Email sent to ${user.email} [${info.messageId}]`);
       return info;
     } catch (e) {
-      console.error(`Email attempt ${attempt} failed for ${user.email}:`, e.message);
+      console.error(`Email attempt ${attempt} failed for ${user.email}: ${e.message}`);
+      // If auth/connection problem, force transport refresh on next attempt
+      if (e.code === "EAUTH" || e.code === "ECONNECTION" || e.responseCode === 535) {
+        _transport = null;
+      }
       if (attempt === retries) {
         await logEmail(user.id, ticket.id, "failed", e.message);
-        throw e;
+        throw new Error(`Email delivery failed after ${retries} attempts: ${e.message}`);
       }
       await sleep(1000 * Math.pow(2, attempt));
     }
