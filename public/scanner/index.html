@@ -380,7 +380,8 @@ body {
 </div>
 
 <script>
-const API_BASE = (localStorage.getItem('sf_api_base') || '').replace(/\/+$/, '');
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE = (localStorage.getItem('sf_api_base') || (isLocal ? '' : 'https://summerfest2026.onrender.com')).replace(/\/+$/, '');
 
 let TOKEN = '';
 let scanning = false;

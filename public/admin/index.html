@@ -353,7 +353,8 @@ tr:hover td { background: rgba(124,58,237,0.05); }
 
 <script>
 // ── Config ──────────────────────────────────────────────────────
-const API_BASE = (localStorage.getItem('sf_api_base') || '').replace(/\/+$/, '');
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE = (localStorage.getItem('sf_api_base') || (isLocal ? '' : 'https://summerfest2026.onrender.com')).replace(/\/+$/, '');
 let TOKEN = localStorage.getItem('sf_token') || '';
 let currentPanel = 'dashboard';
 let usersPage = 1, ticketsPage = 1, logsPage = 1;
